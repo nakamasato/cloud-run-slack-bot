@@ -23,10 +23,34 @@ type SlackEventService struct {
 	handler *SlackEventHandler
 }
 
-type SlackSocketService struct {
-	// https://pkg.go.dev/github.com/slack-go/slack/socketmode#Client
-	sClient *socketmode.Client
-	handler *SlackEventHandler
+// https://pkg.go.dev/github.com/slack-go/slack/socketmode
+// https://github.com/slack-go/slack/blob/master/examples/socketmode/socketmode.go
+// https://pkg.go.dev/github.com/slack-go/slack#readme-socketmode-event-handler-experimental
+func NewSocketmodeHandler(token, appToken string, runSvc *run.ProjectsLocationsServicesService, mClient *monitoring.MonitoringClient) (*socketmode.SocketmodeHandler, error) {
+	// https://pkg.go.dev/github.com/slack-go/slack/socketmode#New
+	client := slack.New(token, slack.OptionAppLevelToken(appToken))
+	sClient := socketmode.New(client)
+	socketmodeHandler := socketmode.NewSocketmodeHandler(sClient)
+	handler := &SlackEventHandler{client: client, mClient: mClient, runService: runSvc}
+	socketmodeHandler.Handle(socketmode.EventTypeEventsAPI, handler.SocketmodeHandlerFuncEventsAPI)
+	socketmodeHandler.Handle(socketmode.EventTypeConnecting, func(socketEvent *socketmode.Event, client *socketmode.Client) {
+		log.Println("Connecting to Slack with Socket Mode...")
+	})
+	socketmodeHandler.Handle(socketmode.EventTypeConnectionError, func(socketEvent *socketmode.Event, client *socketmode.Client) {
+		log.Println("Connection failed. Retrying later...")
+	})
+	socketmodeHandler.Handle(socketmode.EventTypeConnected, func(socketEvent *socketmode.Event, client *socketmode.Client) {
+		log.Println("Connected to Slack with Socket Mode.")
+	})
+	socketmodeHandler.Handle(socketmode.EventTypeInteractive, func(socketEvent *socketmode.Event, client *socketmode.Client) {
+		interaction, ok := socketEvent.Data.(slack.InteractionCallback)
+		if !ok {
+			return
+		}
+		// TODO: handle interactive message
+		log.Println(interaction)
+	})
+	return socketmodeHandler, nil
 }
 
 func NewSlackEventService(token string, runSvc *run.ProjectsLocationsServicesService, mClient *monitoring.MonitoringClient) (*SlackEventService, error) {
@@ -37,62 +61,12 @@ func NewSlackEventService(token string, runSvc *run.ProjectsLocationsServicesSer
 	}, nil
 }
 
-func NewSlackSocketService(token, appToken string, runSvc *run.ProjectsLocationsServicesService, mClient *monitoring.MonitoringClient) (*SlackSocketService, error) {
-	// https://pkg.go.dev/github.com/slack-go/slack/socketmode#New
-	client := slack.New(token, slack.OptionAppLevelToken(appToken))
-	sClient := socketmode.New(client)
-	return &SlackSocketService{
-		sClient: sClient,
-		handler: &SlackEventHandler{client: client, mClient: mClient, runService: runSvc},
-	}, nil
-}
-
 // SlackEventsHandler starts http server
 func (svc *SlackEventService) Run() {
 	http.HandleFunc("/slack/events", svc.SlackEventsHandler())
 	log.Println("[INFO] Server listening")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
-	}
-}
-
-// runSocket start socket mode
-// https://pkg.go.dev/github.com/slack-go/slack/socketmode
-// https://github.com/slack-go/slack/blob/master/examples/socketmode/socketmode.go
-func (svc *SlackSocketService) Run() {
-	go func() {
-		for socketEvent := range svc.sClient.Events {
-			switch socketEvent.Type {
-			case socketmode.EventTypeConnecting:
-				log.Println("Connecting to Slack with Socket Mode...")
-			case socketmode.EventTypeConnectionError:
-				log.Println("Connection failed. Retrying later...")
-			case socketmode.EventTypeConnected:
-				log.Println("Connected to Slack with Socket Mode.")
-			case socketmode.EventTypeEventsAPI:
-				event, ok := socketEvent.Data.(slackevents.EventsAPIEvent)
-				if !ok {
-					continue
-				}
-				svc.sClient.Ack(*socketEvent.Request)
-				err := svc.handler.HandleEvents(&event)
-				if err != nil {
-					log.Println(err)
-				}
-			case socketmode.EventTypeInteractive:
-				interaction, ok := socketEvent.Data.(slack.InteractionCallback)
-				if !ok {
-					continue
-				}
-				// TODO: handle interactive message
-				log.Println(interaction)
-			}
-		}
-	}()
-
-	err := svc.sClient.Run()
-	if err != nil {
-		log.Print(err)
 	}
 }
 
