@@ -5,38 +5,46 @@ import (
 	"log"
 	"os"
 
-	monitoringineternal "github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
-	slackinternal "github.com/nakamasato/go-cloud-run-alert-bot/pkg/slack"
-	"google.golang.org/api/run/v2"
+	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/cloudrun"
+	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
+	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/slack"
 )
 
 func main() {
 	var err error
-	mClient, err := monitoringineternal.NewMonitoringClient(os.Getenv("PROJECT"))
+	project := os.Getenv("PROJECT")
+	if project == "" {
+		log.Fatal("PROJECT env var is required")
+	}
+	region := os.Getenv("REGION")
+	if region == "" {
+		log.Fatal("REGION env var is required")
+	}
+
+	mClient, err := monitoring.NewMonitoringClient(project)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer mClient.Close()
 
 	ctx := context.Background()
-	runService, err := run.NewService(ctx)
-	plSvc := run.NewProjectsLocationsServicesService(runService)
+	rClient, err := cloudrun.NewClient(ctx, project, region)
 	if err != nil {
 		log.Fatalf("Failed to create run service: %v", err)
 	}
 
-	var svc slackinternal.SlackService
+	var svc slack.SlackService
 	if os.Getenv("SLACK_APP_MODE") == "events" {
-		svc, err = slackinternal.NewSlackEventService(
+		svc, err = slack.NewSlackEventService(
 			os.Getenv("SLACK_BOT_TOKEN"),
-			plSvc,
+			rClient,
 			mClient,
 		)
 	} else if os.Getenv("SLACK_APP_MODE") == "socket" {
-		svc, err = slackinternal.NewSlackSocketService(
+		svc, err = slack.NewSlackSocketService(
 			os.Getenv("SLACK_BOT_TOKEN"),
 			os.Getenv("SLACK_APP_TOKEN"),
-			plSvc,
+			rClient,
 			mClient,
 		)
 	}

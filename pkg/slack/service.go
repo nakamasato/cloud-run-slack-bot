@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/cloudrun"
 	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
-	"google.golang.org/api/run/v2"
 )
 
 type SlackService interface {
@@ -29,21 +29,21 @@ type SlackSocketService struct {
 	handler *SlackEventHandler
 }
 
-func NewSlackEventService(token string, runSvc *run.ProjectsLocationsServicesService, mClient *monitoring.MonitoringClient) (*SlackEventService, error) {
+func NewSlackEventService(token string, rClient *cloudrun.Client, mClient *monitoring.Client) (*SlackEventService, error) {
 	client := slack.New(token)
 	return &SlackEventService{
 		client:  client,
-		handler: &SlackEventHandler{client: client, mClient: mClient, runService: runSvc},
+		handler: &SlackEventHandler{client: client, mClient: mClient, rClient: rClient},
 	}, nil
 }
 
-func NewSlackSocketService(token, appToken string, runSvc *run.ProjectsLocationsServicesService, mClient *monitoring.MonitoringClient) (*SlackSocketService, error) {
+func NewSlackSocketService(token, appToken string, rClient *cloudrun.Client, mClient *monitoring.Client) (*SlackSocketService, error) {
 	// https://pkg.go.dev/github.com/slack-go/slack/socketmode#New
 	client := slack.New(token, slack.OptionAppLevelToken(appToken))
 	sClient := socketmode.New(client)
 	return &SlackSocketService{
 		sClient: sClient,
-		handler: &SlackEventHandler{client: client, mClient: mClient, runService: runSvc},
+		handler: &SlackEventHandler{client: client, mClient: mClient, rClient: rClient},
 	}, nil
 }
 

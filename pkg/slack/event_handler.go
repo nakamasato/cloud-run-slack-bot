@@ -4,29 +4,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	monitoringineternal "github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
+	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/cloudrun"
+	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
-	"google.golang.org/api/run/v2"
 )
 
 const (
-	selectVersionAction = "select-version"
-	selectServiceAction = "select-service"
+	selectVersionAction           = "select-version"
+	selectServiceAction           = "select-service"
+	selectServiceForMetricsAction = "select-service-for-metrics"
 )
 
 // SlackEventHandler handles slack events this is used by SlackEventService and SlackSocketService
 type SlackEventHandler struct {
-	client     *slack.Client
-	mClient    *monitoringineternal.MonitoringClient
-	runService *run.ProjectsLocationsServicesService
+	client  *slack.Client
+	mClient *monitoring.Client
+	rClient *cloudrun.Client
 }
 
 func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) error {
+	ctx := context.Background()
 	innerEvent := event.InnerEvent
 	switch e := innerEvent.Data.(type) {
 	case *slackevents.AppMentionEvent:
@@ -41,10 +42,9 @@ func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) erro
 		case "deploy":
 			return h.deploy(e.Channel)
 		case "list":
-			return h.list(e.Channel)
+			return h.list(ctx, e.Channel)
 		case "metrics":
-			service := "go-cloud-run-alert-bot" // enable to specify service name
-			return h.metrics(e.Channel, service)
+			return h.metrics(ctx, e.Channel)
 		default:
 			_, _, err := h.client.PostMessage(e.Channel, slack.MsgOptionText("I don't understand the command", false))
 			return err
@@ -64,6 +64,15 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Deploying "+selected, false))
 			return err
 		case selectServiceAction:
+			svcName := action.SelectedOption.Value
+			res, err := h.rClient.GetService(ctx, svcName)
+			if err != nil {
+				_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
+				return err
+			}
+			_, _, err = h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText(res.String(), false))
+			return err
+		case selectServiceForMetricsAction:
 			svcName := action.SelectedOption.Value
 			duration := 24 * time.Hour
 			rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, duration)
@@ -107,15 +116,14 @@ func (h *SlackEventHandler) deploy(channel string) error {
 	return err
 }
 
-func (h *SlackEventHandler) list(channel string) error {
-	projLoc := "projects/" + os.Getenv("PROJECT") + "/locations/" + os.Getenv("REGION")
-	res, err := h.runService.List(projLoc).Do()
+func (h *SlackEventHandler) list(ctx context.Context, channel string) error {
+
+	svcNames, err := h.rClient.ListServices(ctx)
 	if err != nil {
 		return err
 	}
 	options := []*slack.OptionBlockObject{}
-	for _, s := range res.Services {
-		svcName := strings.TrimPrefix(s.Name, projLoc+"/services/")
+	for _, svcName := range svcNames {
 		fmt.Println(svcName)
 		options = append(options, &slack.OptionBlockObject{
 			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: svcName}, Value: svcName,
@@ -131,7 +139,7 @@ func (h *SlackEventHandler) list(channel string) error {
 			},
 			Accessory: &slack.Accessory{
 				SelectElement: &slack.SelectBlockElement{
-					ActionID: "select-service",
+					ActionID: selectServiceAction,
 					Type:     slack.OptTypeStatic,
 					Placeholder: &slack.TextBlockObject{
 						Type: slack.PlainTextType,
@@ -145,13 +153,38 @@ func (h *SlackEventHandler) list(channel string) error {
 	return err
 }
 
-func (h *SlackEventHandler) metrics(channel, service string) error {
-	ctx := context.Background()
-	rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, service, 24*time.Hour)
-	msg := fmt.Sprintf("[%s] request:%d", service, rc)
+func (h *SlackEventHandler) metrics(ctx context.Context, channel string) error {
+	svcNames, err := h.rClient.ListServices(ctx)
 	if err != nil {
-		msg = "Failed to get metrics: " + err.Error()
+		return err
 	}
-	_, _, err = h.client.PostMessage(channel, slack.MsgOptionText(msg, false))
+	options := []*slack.OptionBlockObject{}
+	for _, svcName := range svcNames {
+		fmt.Println(svcName)
+		options = append(options, &slack.OptionBlockObject{
+			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: svcName}, Value: svcName,
+		})
+	}
+
+	_, _, err = h.client.PostMessage(channel, slack.MsgOptionBlocks(
+		slack.SectionBlock{
+			Type: slack.MBTSection,
+			Text: &slack.TextBlockObject{
+				Type: slack.PlainTextType,
+				Text: "which service do you want to metrics?",
+			},
+			Accessory: &slack.Accessory{
+				SelectElement: &slack.SelectBlockElement{
+					ActionID: selectServiceForMetricsAction,
+					Type:     slack.OptTypeStatic,
+					Placeholder: &slack.TextBlockObject{
+						Type: slack.PlainTextType,
+						Text: "Select service",
+					},
+					Options: options,
+				},
+			},
+		},
+	))
 	return err
 }

@@ -31,23 +31,23 @@ func (c *MonitorCondition) filter() string {
 	return strings.Join(filters, " AND\n ")
 }
 
-type MonitoringClient struct {
+type Client struct {
 	project string
 	config  *MonitorCondition
 	client  *monitoring.MetricClient
 }
 
-func NewMonitoringClient(project string) (*MonitoringClient, error) {
+func NewMonitoringClient(project string) (*Client, error) {
 	ctx := context.Background()
 	client, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		return nil, err
 	}
 	log.Printf("Monitoring client created for project %s\n", project)
-	return &MonitoringClient{project: project, client: client}, nil
+	return &Client{project: project, client: client}, nil
 }
 
-func (mc *MonitoringClient) GetCloudRunServiceRequestCount(ctx context.Context, service string, duration time.Duration) (int64, error) {
+func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service string, duration time.Duration) (int64, error) {
 	monCon := MonitorCondition{
 		Project: mc.project,
 		Filters: []MonitorFilter{
@@ -58,7 +58,7 @@ func (mc *MonitoringClient) GetCloudRunServiceRequestCount(ctx context.Context, 
 	return mc.GetRequestCount(ctx, monCon, duration)
 }
 
-func (mc *MonitoringClient) GetRequestCount(ctx context.Context, monCon MonitorCondition, duration time.Duration) (int64, error) {
+func (mc *Client) GetRequestCount(ctx context.Context, monCon MonitorCondition, duration time.Duration) (int64, error) {
 	endtime := time.Now().UTC()
 	startTime := endtime.Add(-1 * duration).UTC()
 	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
@@ -99,6 +99,6 @@ func (mc *MonitoringClient) GetRequestCount(ctx context.Context, monCon MonitorC
 	return requestCount, nil
 }
 
-func (mc *MonitoringClient) Close() error {
+func (mc *Client) Close() error {
 	return mc.client.Close()
 }
