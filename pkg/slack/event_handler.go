@@ -11,7 +11,6 @@ import (
 	monitoringineternal "github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
-	"github.com/slack-go/slack/socketmode"
 	"google.golang.org/api/run/v2"
 )
 
@@ -19,16 +18,6 @@ type SlackEventHandler struct {
 	client     *slack.Client
 	mClient    *monitoringineternal.MonitoringClient
 	runService *run.ProjectsLocationsServicesService
-}
-
-// Implement SocketmodeHanlderFunc
-func (h *SlackEventHandler) SocketmodeHandlerFuncEventsAPI(socketEvent *socketmode.Event, client *socketmode.Client) {
-	event, ok := socketEvent.Data.(slackevents.EventsAPIEvent)
-	if !ok {
-		return
-	}
-	client.Ack(*socketEvent.Request)
-	h.HandleEvents(&event)
 }
 
 func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) error {

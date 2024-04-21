@@ -25,26 +25,23 @@ func main() {
 		log.Fatalf("Failed to create run service: %v", err)
 	}
 
+	var svc slackinternal.SlackService
 	if os.Getenv("SLACK_APP_MODE") == "events" {
-		svc, err := slackinternal.NewSlackEventService(
+		svc, err = slackinternal.NewSlackEventService(
 			os.Getenv("SLACK_BOT_TOKEN"),
 			plSvc,
 			mClient,
 		)
-		if err != nil {
-			log.Fatal(err)
-		}
-		svc.Run()
 	} else if os.Getenv("SLACK_APP_MODE") == "socket" {
-		socketmodeHandler, err := slackinternal.NewSocketmodeHandler(
+		svc, err = slackinternal.NewSlackSocketService(
 			os.Getenv("SLACK_BOT_TOKEN"),
 			os.Getenv("SLACK_APP_TOKEN"),
 			plSvc,
 			mClient,
 		)
-		if err != nil {
-			log.Fatal(err)
-		}
-		socketmodeHandler.RunEventLoop()
 	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	svc.Run()
 }
