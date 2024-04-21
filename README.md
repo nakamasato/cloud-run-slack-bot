@@ -13,6 +13,8 @@ This is a simple bot that sends a message to a Slack channel when a new revision
 
 ## Environment Variables
 
+1. `PROJECT`: GCP Project ID
+1. `REGION`: GCP Region
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
 1. `SLACK_OAUTH_TOKEN`: Slack oauth token
 1. `SLACK_APP_MODE`: Slack App Mode (`events` or `socket`)
@@ -40,33 +42,33 @@ REGION=asia-northeast1
 
 ```shell
 echo -n "xoxb-xxxx" | gcloud secrets create slack-bot-token --replication-policy automatic --project "$PROJECT" --data-file=-
-gcloud iam service-accounts create go-cloud-run-alert-bot --project $PROJECT
+gcloud iam service-accounts create cloud-run-slack-bot --project $PROJECT
 # allow app to access the secret
 gcloud secrets add-iam-policy-binding slack-bot-token \
-    --member="serviceAccount:go-cloud-run-alert-bot@${PROJECT}.iam.gserviceaccount.com" \
+    --member="serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor" --project ${PROJECT}
 # allow app to get information about Cloud Run services
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member=serviceAccount:go-cloud-run-alert-bot@${PROJECT}.iam.gserviceaccount.com --role=roles/run.viewer
+    --member=serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com --role=roles/run.viewer
 # allow app to get metrics of Cloud Run services
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member=serviceAccount:go-cloud-run-alert-bot@${PROJECT}.iam.gserviceaccount.com --role=roles/monitoring.viewer
+    --member=serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com --role=roles/monitoring.viewer
 ```
 
 Build a container image
 
 ```
-gcloud builds submit . --pack "image=$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/go-cloud-run-alert-bot" --project ${PROJECT}
+gcloud builds submit . --pack "image=$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot" --project ${PROJECT}
 ```
 
 Deploy the image to Cloud Run
 
 ```
-gcloud run deploy go-cloud-run-alert-bot \
+gcloud run deploy cloud-run-slack-bot \
     --set-secrets SLACK_BOT_TOKEN=slack-bot-token:latest \
     --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=events" \
-    --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/go-cloud-run-alert-bot \
-    --service-account go-cloud-run-alert-bot@${PROJECT}.iam.gserviceaccount.com \
+    --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot \
+    --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
     --project "$PROJECT" --region "$REGION"
 ```
 
@@ -75,13 +77,13 @@ gcloud run deploy go-cloud-run-alert-bot \
 Build a container image
 
 ```
-gcloud builds submit . --pack "image=$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/go-cloud-run-alert-bot" --project ${PROJECT}
+gcloud builds submit . --pack "image=$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot" --project ${PROJECT}
 ```
 
 Deploy the image to Cloud Run
 
 ```
-gcloud run deploy go-cloud-run-alert-bot --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/go-cloud-run-alert-bot --project "$PROJECT" --region "$REGION"
+gcloud run deploy cloud-run-slack-bot --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot --project "$PROJECT" --region "$REGION"
 ```
 
 ## References
@@ -89,4 +91,6 @@ gcloud run deploy go-cloud-run-alert-bot --image $REGION-docker.pkg.dev/$PROJECT
 1. https://qiita.com/frozenbonito/items/cf75dadce12ef9a048e9
 1. https://qiita.com/frozenbonito/items/1df9bb685e6173160991
 1. https://medium.com/google-cloud/querying-metrics-from-google-cloud-monitoring-in-golang-2631ee3d33c1
->>>>>>> bc7f8fb (feat: create slack bot)
+1. https://qiita.com/daitai-daidai/items/71f97d9cdb0e2ddf9781
+1. https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest
+1. https://pkg.go.dev/github.com/slack-go/slack/socketmode#Client

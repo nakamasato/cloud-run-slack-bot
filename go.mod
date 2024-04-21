@@ -1,4 +1,4 @@
-module github.com/nakamasato/go-cloud-run-alert-bot
+module github.com/nakamasato/cloud-run-slack-bot
 
 go 1.21.4
 

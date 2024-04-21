@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/cloudrun"
-	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 )

@@ -16,9 +16,9 @@ type Client struct {
 }
 
 type CloudRunService struct {
-	Name         string
-	LastModifier string
-	UpdateTime   string
+	Name           string
+	LastModifier   string
+	UpdateTime     string
 	LatestRevision string
 }
 
@@ -71,9 +71,9 @@ func (c *Client) GetService(ctx context.Context, serviceName string) (*CloudRunS
 	fmt.Printf("Service: %+v\n", res)
 
 	return &CloudRunService{
-		Name:         c.GetServiceNameFromFullname(res.Name),
-		LastModifier: res.LastModifier,
-		UpdateTime:   res.UpdateTime,
+		Name:           c.GetServiceNameFromFullname(res.Name),
+		LastModifier:   res.LastModifier,
+		UpdateTime:     res.UpdateTime,
 		LatestRevision: strings.TrimPrefix(res.LatestCreatedRevision, fmt.Sprintf("%s/services/%s/revisions/", projLoc, serviceName)),
 	}, nil
 }

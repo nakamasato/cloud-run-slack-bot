@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/cloudrun"
-	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/monitoring"
-	"github.com/nakamasato/go-cloud-run-alert-bot/pkg/slack"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 )
 
 func main() {
