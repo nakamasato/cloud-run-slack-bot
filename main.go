@@ -12,7 +12,7 @@ import (
 
 func main() {
 	var err error
-	mClient, err := monitoringineternal.NewMonitoringClient()
+	mClient, err := monitoringineternal.NewMonitoringClient(os.Getenv("PROJECT"))
 	if err != nil {
 		log.Fatal(err)
 	}

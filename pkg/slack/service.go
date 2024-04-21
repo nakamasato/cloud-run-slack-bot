@@ -50,6 +50,7 @@ func NewSlackSocketService(token, appToken string, runSvc *run.ProjectsLocations
 // SlackEventsHandler starts http server
 func (svc *SlackEventService) Run() {
 	http.HandleFunc("/slack/events", svc.SlackEventsHandler())
+	http.HandleFunc("/slack/interaction", svc.SlackInteractionHandler())
 	log.Println("[INFO] Server listening")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
@@ -60,46 +61,15 @@ func (svc *SlackEventService) Run() {
 // https://pkg.go.dev/github.com/slack-go/slack/socketmode
 // https://github.com/slack-go/slack/blob/master/examples/socketmode/socketmode.go
 func (svc *SlackSocketService) Run() {
-	go func() {
-		for socketEvent := range svc.sClient.Events {
-			switch socketEvent.Type {
-			case socketmode.EventTypeConnecting:
-				log.Println("Connecting to Slack with Socket Mode...")
-			case socketmode.EventTypeConnectionError:
-				log.Println("Connection failed. Retrying later...")
-			case socketmode.EventTypeConnected:
-				log.Println("Connected to Slack with Socket Mode.")
-			case socketmode.EventTypeEventsAPI:
-				event, ok := socketEvent.Data.(slackevents.EventsAPIEvent)
-				if !ok {
-					continue
-				}
-				svc.sClient.Ack(*socketEvent.Request)
-				err := svc.handler.HandleEvents(&event)
-				if err != nil {
-					log.Println(err)
-				}
-			case socketmode.EventTypeInteractive:
-				interaction, ok := socketEvent.Data.(slack.InteractionCallback)
-				if !ok {
-					continue
-				}
-				// TODO: handle interactive message
-				log.Println(interaction)
-			}
-		}
-	}()
+	go svc.SlackEventsHandler()
 
 	err := svc.sClient.Run()
 	if err != nil {
-		log.Print(err)
+		log.Fatal(err)
 	}
 }
 
-const (
-	selectVersionAction = "select-version"
-)
-
+// SlackEventsHandler is http.HandlerFunc for Slack Events API
 func (svc *SlackEventService) SlackEventsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -136,6 +106,64 @@ func (svc *SlackEventService) SlackEventsHandler() http.HandlerFunc {
 				log.Println(err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
+			}
+		}
+	}
+}
+
+func (svc *SlackEventService) SlackInteractionHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		var interaction slack.InteractionCallback
+		if err := json.Unmarshal(body, &interaction); err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		err = svc.handler.HandleInteraction(&interaction)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+// SlackEventsHandler receives events from Slack socket mode channel and handles each event
+func (svc *SlackSocketService) SlackEventsHandler() {
+	for socketEvent := range svc.sClient.Events {
+		switch socketEvent.Type {
+		case socketmode.EventTypeConnecting:
+			log.Println("Connecting to Slack with Socket Mode...")
+		case socketmode.EventTypeConnectionError:
+			log.Println("Connection failed. Retrying later...")
+		case socketmode.EventTypeConnected:
+			log.Println("Connected to Slack with Socket Mode.")
+		case socketmode.EventTypeEventsAPI:
+			event, ok := socketEvent.Data.(slackevents.EventsAPIEvent)
+			if !ok {
+				continue
+			}
+			svc.sClient.Ack(*socketEvent.Request)
+			err := svc.handler.HandleEvents(&event)
+			if err != nil {
+				log.Println(err)
+			}
+		case socketmode.EventTypeInteractive:
+			interaction, ok := socketEvent.Data.(slack.InteractionCallback)
+			if !ok {
+				continue
+			}
+			err := svc.handler.HandleInteraction(&interaction)
+			if err != nil {
+				log.Println(err)
 			}
 		}
 	}

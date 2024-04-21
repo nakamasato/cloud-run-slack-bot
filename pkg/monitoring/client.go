@@ -4,6 +4,7 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -31,17 +32,30 @@ func (c *MonitorCondition) filter() string {
 }
 
 type MonitoringClient struct {
-	config *MonitorCondition
-	client *monitoring.MetricClient
+	project string
+	config  *MonitorCondition
+	client  *monitoring.MetricClient
 }
 
-func NewMonitoringClient() (*MonitoringClient, error) {
+func NewMonitoringClient(project string) (*MonitoringClient, error) {
 	ctx := context.Background()
 	client, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &MonitoringClient{client: client}, nil
+	log.Printf("Monitoring client created for project %s\n", project)
+	return &MonitoringClient{project: project, client: client}, nil
+}
+
+func (mc *MonitoringClient) GetCloudRunServiceRequestCount(ctx context.Context, service string, duration time.Duration) (int64, error) {
+	monCon := MonitorCondition{
+		Project: mc.project,
+		Filters: []MonitorFilter{
+			{"resource.labels.service_name": service},
+			{"metric.type": "run.googleapis.com/request_count"},
+		},
+	}
+	return mc.GetRequestCount(ctx, monCon, duration)
 }
 
 func (mc *MonitoringClient) GetRequestCount(ctx context.Context, monCon MonitorCondition, duration time.Duration) (int64, error) {

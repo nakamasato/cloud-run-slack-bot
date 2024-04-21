@@ -14,6 +14,12 @@ import (
 	"google.golang.org/api/run/v2"
 )
 
+const (
+	selectVersionAction = "select-version"
+	selectServiceAction = "select-service"
+)
+
+// SlackEventHandler handles slack events this is used by SlackEventService and SlackSocketService
 type SlackEventHandler struct {
 	client     *slack.Client
 	mClient    *monitoringineternal.MonitoringClient
@@ -37,13 +43,39 @@ func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) erro
 		case "list":
 			return h.list(e.Channel)
 		case "metrics":
-			return h.metrics(e.Channel)
+			service := "go-cloud-run-alert-bot" // enable to specify service name
+			return h.metrics(e.Channel, service)
 		default:
 			_, _, err := h.client.PostMessage(e.Channel, slack.MsgOptionText("I don't understand the command", false))
 			return err
 		}
 	}
 	return errors.New(fmt.Sprintf("unsupported event %v", innerEvent.Type))
+}
+
+func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCallback) error {
+	ctx := context.Background()
+	switch interaction.Type {
+	case slack.InteractionTypeBlockActions:
+		action := interaction.ActionCallback.BlockActions[0]
+		switch action.ActionID {
+		case selectVersionAction:
+			selected := action.SelectedOption.Value
+			_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Deploying "+selected, false))
+			return err
+		case selectServiceAction:
+			svcName := action.SelectedOption.Value
+			duration := 24 * time.Hour
+			rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, duration)
+			if err != nil {
+				_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Failed to get metrics: "+err.Error(), false))
+				return err
+			}
+			_, _, err = h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText(fmt.Sprintf("Requests count for '%s' is %d (last %s)", svcName, rc, duration), false))
+			return err
+		}
+	}
+	return errors.New(fmt.Sprintf("unsupported interaction %v", interaction.Type))
 }
 
 func (h *SlackEventHandler) ping(channel string) error {
@@ -81,25 +113,42 @@ func (h *SlackEventHandler) list(channel string) error {
 	if err != nil {
 		return err
 	}
-	svcNames := []string{}
+	options := []*slack.OptionBlockObject{}
 	for _, s := range res.Services {
-		svcNames = append(svcNames, s.Name)
+		svcName := strings.TrimPrefix(s.Name, projLoc+"/services/")
+		fmt.Println(svcName)
+		options = append(options, &slack.OptionBlockObject{
+			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: svcName}, Value: svcName,
+		})
 	}
-	svcNamesStr := strings.Join(svcNames, "\n")
-	_, _, err = h.client.PostMessage(channel, slack.MsgOptionText(svcNamesStr, false))
+
+	_, _, err = h.client.PostMessage(channel, slack.MsgOptionBlocks(
+		slack.SectionBlock{
+			Type: slack.MBTSection,
+			Text: &slack.TextBlockObject{
+				Type: slack.PlainTextType,
+				Text: "which service do you want to check?",
+			},
+			Accessory: &slack.Accessory{
+				SelectElement: &slack.SelectBlockElement{
+					ActionID: "select-service",
+					Type:     slack.OptTypeStatic,
+					Placeholder: &slack.TextBlockObject{
+						Type: slack.PlainTextType,
+						Text: "Select service",
+					},
+					Options: options,
+				},
+			},
+		},
+	))
 	return err
 }
 
-func (h *SlackEventHandler) metrics(channel string) error {
+func (h *SlackEventHandler) metrics(channel, service string) error {
 	ctx := context.Background()
-	rc, err := h.mClient.GetRequestCount(ctx, monitoringineternal.MonitorCondition{
-		Project: os.Getenv("PROJECT"),
-		Filters: []monitoringineternal.MonitorFilter{
-			{"metric.type": "run.googleapis.com/request_count"},
-			{"resource.labels.service_name": "go-cloud-run-alert-bot"}, // TODO: enable to specify service name
-		},
-	}, 24*time.Hour)
-	msg := fmt.Sprintf("Request count: %d", rc)
+	rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, service, 24*time.Hour)
+	msg := fmt.Sprintf("[%s] request:%d", service, rc)
 	if err != nil {
 		msg = "Failed to get metrics: " + err.Error()
 	}
