@@ -113,21 +113,14 @@ func (svc *SlackEventService) SlackEventsHandler() http.HandlerFunc {
 
 func (svc *SlackEventService) SlackInteractionHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
 		var interaction slack.InteractionCallback
-		if err := json.Unmarshal(body, &interaction); err != nil {
+		if err := json.Unmarshal([]byte(r.FormValue("payload")), &interaction); err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		err = svc.handler.HandleInteraction(&interaction)
+		err := svc.handler.HandleInteraction(&interaction)
 		if err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
