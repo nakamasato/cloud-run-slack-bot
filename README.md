@@ -11,6 +11,24 @@ This is a simple bot that sends a message to a Slack channel when a new revision
 1. Interact with Cloud Run service on Slack.
     1. Get metrics of the service. (`roles/monitoring.viewer` is required.)
 
+## Environment Variables
+
+1. `SLACK_BOT_TOKEN`: Slack Bot Token
+1. `SLACK_OAUTH_TOKEN`: Slack oauth token
+1. `SLACK_APP_MODE`: Slack App Mode (`events` or `socket`)
+
+
+## Local Run
+
+```
+go run main.go
+```
+
+TODO:
+```
+curl -H 'Content-Type: application/json' -X POST -d '{"type": "event_callback", "event": {"type": "app_mention", "user": "xx", "reaction": "memo", "item_user": "xx", "item": {"type": "message", "channel": "CHANNEL", "ts": "1701919197.246629"}, "event_ts": "1704502151.000000"}}' localhost:8080/slack/events
+```
+
 ## Deploy
 
 ```
@@ -46,13 +64,13 @@ Deploy the image to Cloud Run
 ```
 gcloud run deploy go-cloud-run-alert-bot \
     --set-secrets SLACK_BOT_TOKEN=slack-bot-token:latest \
-    --set-env-vars "PROJECT=$PROJECT,REGION=$REGION" \
+    --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=events" \
     --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/go-cloud-run-alert-bot \
     --service-account go-cloud-run-alert-bot@${PROJECT}.iam.gserviceaccount.com \
     --project "$PROJECT" --region "$REGION"
 ```
 
-### Update the service with new version
+### Deploy new version
 
 Build a container image
 
