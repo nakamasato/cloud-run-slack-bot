@@ -77,10 +77,10 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			duration := 24 * time.Hour
 			rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, duration)
 			if err != nil {
-				_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Failed to get metrics: "+err.Error(), false))
+				_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
 				return err
 			}
-			_, _, err = h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText(fmt.Sprintf("Requests count for '%s' is %d (last %s)", svcName, rc, duration), false))
+			_, _, err = h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText(fmt.Sprintf("requests (last %s) for service:%s\nrequests:\n%s", duration, svcName, rc), false))
 			return err
 		}
 	}
