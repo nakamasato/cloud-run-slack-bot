@@ -4,19 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/visualize"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 )
 
 const (
-	selectVersionAction           = "select-version"
-	selectServiceAction           = "select-service"
-	selectServiceForMetricsAction = "select-service-for-metrics"
+	selectServiceActionForDescribe = "select-service-for-describe"
+	selectServiceActionForMetrics  = "select-service-for-metrics"
 )
 
 // SlackEventHandler handles slack events this is used by SlackEventService and SlackSocketService
@@ -36,15 +38,14 @@ func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) erro
 			return errors.New("no command found")
 		}
 		command := message[1] // e.Text is "<@bot_id> command"
+		log.Printf("command: %s\n", command)
 		switch command {
 		case "ping":
 			return h.ping(e.Channel)
-		case "deploy":
-			return h.deploy(e.Channel)
-		case "list":
-			return h.list(ctx, e.Channel)
+		case "describe":
+			return h.list(ctx, e.Channel, selectServiceActionForDescribe)
 		case "metrics":
-			return h.metrics(ctx, e.Channel)
+			return h.list(ctx, e.Channel, selectServiceActionForMetrics)
 		default:
 			_, _, err := h.client.PostMessage(e.Channel, slack.MsgOptionText("I don't understand the command", false))
 			return err
@@ -59,29 +60,10 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 	case slack.InteractionTypeBlockActions:
 		action := interaction.ActionCallback.BlockActions[0]
 		switch action.ActionID {
-		case selectVersionAction:
-			selected := action.SelectedOption.Value
-			_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Deploying "+selected, false))
-			return err
-		case selectServiceAction:
-			svcName := action.SelectedOption.Value
-			res, err := h.rClient.GetService(ctx, svcName)
-			if err != nil {
-				_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
-				return err
-			}
-			_, _, err = h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText(res.String(), false))
-			return err
-		case selectServiceForMetricsAction:
-			svcName := action.SelectedOption.Value
-			duration := 24 * time.Hour
-			rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, duration)
-			if err != nil {
-				_, _, err := h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
-				return err
-			}
-			_, _, err = h.client.PostMessage(interaction.Channel.ID, slack.MsgOptionText(fmt.Sprintf("requests (last %s) for service:%s\nrequests:\n%s", duration, svcName, rc), false))
-			return err
+		case selectServiceActionForDescribe:
+			return h.describeService(ctx, interaction.Channel.ID, action.SelectedOption.Value)
+		case selectServiceActionForMetrics:
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, action.SelectedOption.Value)
 		}
 	}
 	return errors.New(fmt.Sprintf("unsupported interaction %v", interaction.Type))
@@ -92,32 +74,7 @@ func (h *SlackEventHandler) ping(channel string) error {
 	return err
 }
 
-func (h *SlackEventHandler) deploy(channel string) error {
-	text := slack.NewTextBlockObject(slack.MarkdownType, "Please select *version*.", false, false)
-	textSection := slack.NewSectionBlock(text, nil, nil)
-
-	versions := []string{"v1.0.0", "v1.1.0", "v1.1.1"}
-	options := make([]*slack.OptionBlockObject, 0, len(versions))
-	for _, v := range versions {
-		optionText := slack.NewTextBlockObject(slack.PlainTextType, v, false, false)
-		description := slack.NewTextBlockObject(slack.PlainTextType, "This is the version you want to deploy.", false, false)
-		options = append(options, slack.NewOptionBlockObject(v, optionText, description))
-	}
-
-	placeholder := slack.NewTextBlockObject(slack.PlainTextType, "Select version", false, false)
-	selectMenu := slack.NewOptionsSelectBlockElement(slack.OptTypeStatic, placeholder, "", options...)
-
-	actionBlock := slack.NewActionBlock(selectVersionAction, selectMenu)
-
-	fallbackText := slack.MsgOptionText("This client is not supported.", false)
-	blocks := slack.MsgOptionBlocks(textSection, actionBlock)
-
-	_, _, err := h.client.PostMessage(channel, fallbackText, blocks)
-	return err
-}
-
-func (h *SlackEventHandler) list(ctx context.Context, channel string) error {
-
+func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) error {
 	svcNames, err := h.rClient.ListServices(ctx)
 	if err != nil {
 		return err
@@ -139,7 +96,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel string) error {
 			},
 			Accessory: &slack.Accessory{
 				SelectElement: &slack.SelectBlockElement{
-					ActionID: selectServiceAction,
+					ActionID: actionId,
 					Type:     slack.OptTypeStatic,
 					Placeholder: &slack.TextBlockObject{
 						Type: slack.PlainTextType,
@@ -153,38 +110,45 @@ func (h *SlackEventHandler) list(ctx context.Context, channel string) error {
 	return err
 }
 
-func (h *SlackEventHandler) metrics(ctx context.Context, channel string) error {
-	svcNames, err := h.rClient.ListServices(ctx)
+func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName string) error {
+	duration := 24 * time.Hour
+	rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, duration)
+	if err != nil {
+		_, _, err := h.client.PostMessage(channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
+		return err
+	}
+	_, _, err = h.client.PostMessage(channelId, slack.MsgOptionText(fmt.Sprintf("requests (last %s) for service:%s\nrequests:\n%s", duration, svcName, rc), false))
 	if err != nil {
 		return err
 	}
-	options := []*slack.OptionBlockObject{}
-	for _, svcName := range svcNames {
-		fmt.Println(svcName)
-		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: svcName}, Value: svcName,
-		})
+	log.Println("visualizing")
+	imgName := "hello.png"
+	visualize.Visualize(imgName)
+	file, err := os.Open(imgName)
+	if err != nil {
+		log.Println(err)
+		return err
 	}
+	if stat, err := file.Stat(); err != nil {
+		return err
+	} else {
+		fSummary, err := h.client.UploadFileV2(slack.UploadFileV2Parameters{
+			Reader:   file,
+			FileSize: int(stat.Size()),
+			Filename: imgName,
+			Channel:  channelId,
+		})
+		log.Println(fSummary)
+		return err
+	}
+}
 
-	_, _, err = h.client.PostMessage(channel, slack.MsgOptionBlocks(
-		slack.SectionBlock{
-			Type: slack.MBTSection,
-			Text: &slack.TextBlockObject{
-				Type: slack.PlainTextType,
-				Text: "which service do you want to metrics?",
-			},
-			Accessory: &slack.Accessory{
-				SelectElement: &slack.SelectBlockElement{
-					ActionID: selectServiceForMetricsAction,
-					Type:     slack.OptTypeStatic,
-					Placeholder: &slack.TextBlockObject{
-						Type: slack.PlainTextType,
-						Text: "Select service",
-					},
-					Options: options,
-				},
-			},
-		},
-	))
+func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcName string) error {
+	res, err := h.rClient.GetService(ctx, svcName)
+	if err != nil {
+		_, _, err := h.client.PostMessage(channelId, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
+		return err
+	}
+	_, _, err = h.client.PostMessage(channelId, slack.MsgOptionText(res.String(), false))
 	return err
 }
