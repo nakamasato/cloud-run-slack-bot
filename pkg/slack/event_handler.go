@@ -28,16 +28,17 @@ type SlackEventHandler struct {
 	rClient *cloudrun.Client
 }
 
+// NewSlackEventHandler handles AppMention events
 func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) error {
 	ctx := context.Background()
 	innerEvent := event.InnerEvent
 	switch e := innerEvent.Data.(type) {
 	case *slackevents.AppMentionEvent:
 		message := strings.Split(e.Text, " ")
-		if len(message) < 2 {
-			return errors.New("no command found")
+		command := "describe" // default command
+		if len(message) > 1 {
+			command = message[1] // e.Text is "<@bot_id> command"
 		}
-		command := message[1] // e.Text is "<@bot_id> command"
 		log.Printf("command: %s\n", command)
 		switch command {
 		case "ping":
@@ -47,13 +48,14 @@ func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) erro
 		case "metrics":
 			return h.list(ctx, e.Channel, selectServiceActionForMetrics)
 		default:
-			_, _, err := h.client.PostMessage(e.Channel, slack.MsgOptionText("I don't understand the command", false))
+			_, _, err := h.client.PostMessage(e.Channel, slack.MsgOptionText(fmt.Sprintf("Command '%s' not supported", command), false))
 			return err
 		}
 	}
 	return errors.New(fmt.Sprintf("unsupported event %v", innerEvent.Type))
 }
 
+// HandleInteraction handles Slack interaction events e.g. selectbox, etc.
 func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCallback) error {
 	ctx := context.Background()
 	switch interaction.Type {
@@ -112,18 +114,26 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName string) error {
 	duration := 24 * time.Hour
-	rc, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, duration)
+	aggergationPeriod := 1 * time.Hour
+	seriesMap, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggergationPeriod, duration)
 	if err != nil {
 		_, _, err := h.client.PostMessage(channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
 		return err
 	}
-	_, _, err = h.client.PostMessage(channelId, slack.MsgOptionText(fmt.Sprintf("requests (last %s) for service:%s\nrequests:\n%s", duration, svcName, rc), false))
+	_, _, err = h.client.PostMessage(channelId, slack.MsgOptionText(fmt.Sprintf("requests (last %s) for service:%s\nrequests:\n%s", duration, svcName, seriesMap), false))
 	if err != nil {
 		return err
 	}
 	log.Println("visualizing")
-	imgName := "hello.png"
-	visualize.Visualize(imgName)
+	imgName := fmt.Sprintf("%s-metrics.png", svcName)
+	xaxis := []string{}
+	for _, val := range *seriesMap {
+		for i := 0; i < len(val); i++ {
+			xaxis = append(xaxis, fmt.Sprintf("%d", i))
+		}
+		break
+	}
+	visualize.Visualize("Request Count", "Cloud Run request counts per revision", imgName, &xaxis, seriesMap)
 	file, err := os.Open(imgName)
 	if err != nil {
 		log.Println(err)
