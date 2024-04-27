@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
@@ -22,6 +23,29 @@ const (
 	selectCurrentServiceAction     = "select-current-service"
 )
 
+type Memory struct {
+	mu sync.Mutex
+	// memory for storing target cloud run service (slack user id -> service id)
+	data map[string]string
+}
+
+func (m *Memory) Get(key string) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	val, ok := m.data[key]
+	return val, ok
+}
+
+func (m *Memory) Set(key, val string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.data[key] = val
+}
+
+func NewMemory() *Memory {
+	return &Memory{data: make(map[string]string)}
+}
+
 // SlackEventHandler handles slack events this is used by SlackEventService and SlackSocketService
 type SlackEventHandler struct {
 	// Slack Client
@@ -30,8 +54,8 @@ type SlackEventHandler struct {
 	mClient *monitoring.Client
 	// Cloud Run Client
 	rClient *cloudrun.Client
-	// memory for storing target cloud run service (slack user id -> service id)
-	memory map[string]string
+	// Memory for storing target cloud run service
+	memory *Memory
 }
 
 // NewSlackEventHandler handles AppMention events
@@ -46,14 +70,17 @@ func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) erro
 			command = message[1] // e.Text is "<@bot_id> command"
 		}
 		log.Printf("command: %s\n", command)
-		currentService, ok := h.memory[e.User]
-		if !ok && (command == "metrics" || command == "describe") {
-			return h.list(ctx, e.Channel, selectCurrentServiceAction)
-		}
+		currentService, ok := h.memory.Get(e.User)
 		switch command {
 		case "describe":
+			if !ok {
+				return h.list(ctx, e.Channel, selectServiceActionForDescribe)
+			}
 			return h.describeService(ctx, e.Channel, currentService)
 		case "metrics":
+			if !ok {
+				return h.list(ctx, e.Channel, selectServiceActionForMetrics)
+			}
 			return h.getServiceMetrics(ctx, e.Channel, currentService)
 		case "set":
 			return h.list(ctx, e.Channel, selectCurrentServiceAction)
@@ -74,8 +101,10 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 		action := interaction.ActionCallback.BlockActions[0]
 		switch action.ActionID {
 		case selectServiceActionForDescribe:
+			h.memory.Set(interaction.User.ID, action.SelectedOption.Value)
 			return h.describeService(ctx, interaction.Channel.ID, action.SelectedOption.Value)
 		case selectServiceActionForMetrics:
+			h.memory.Set(interaction.User.ID, action.SelectedOption.Value)
 			return h.getServiceMetrics(ctx, interaction.Channel.ID, action.SelectedOption.Value)
 		case selectCurrentServiceAction:
 			return h.setCurrentService(ctx, interaction.Channel.ID, interaction.User.ID, action.SelectedOption.Value)
@@ -111,7 +140,7 @@ func (h *SlackEventHandler) help(ctx context.Context, channelId, userId string) 
 }
 
 func (h *SlackEventHandler) setCurrentService(ctx context.Context, channelId, userId, svcName string) error {
-	h.memory[userId] = svcName
+	h.memory.Set(userId, svcName)
 	_, err := h.client.PostEphemeralContext(ctx, channelId, userId, slack.MsgOptionText(fmt.Sprintf("current service is set to %s", svcName), false))
 	return err
 }

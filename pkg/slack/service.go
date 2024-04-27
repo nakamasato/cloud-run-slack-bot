@@ -33,7 +33,7 @@ func NewSlackEventService(token string, rClient *cloudrun.Client, mClient *monit
 	client := slack.New(token)
 	return &SlackEventService{
 		client:  client,
-		handler: &SlackEventHandler{client: client, mClient: mClient, rClient: rClient, memory: make(map[string]string)},
+		handler: &SlackEventHandler{client: client, mClient: mClient, rClient: rClient, memory: NewMemory()},
 	}, nil
 }
 
@@ -43,7 +43,7 @@ func NewSlackSocketService(token, appToken string, rClient *cloudrun.Client, mCl
 	sClient := socketmode.New(client)
 	return &SlackSocketService{
 		sClient: sClient,
-		handler: &SlackEventHandler{client: client, mClient: mClient, rClient: rClient, memory: make(map[string]string)},
+		handler: &SlackEventHandler{client: client, mClient: mClient, rClient: rClient, memory: NewMemory()},
 	}, nil
 }
 

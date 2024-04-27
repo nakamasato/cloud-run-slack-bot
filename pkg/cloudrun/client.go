@@ -25,7 +25,7 @@ type CloudRunService struct {
 }
 
 func (c *CloudRunService) String() string {
-	return fmt.Sprintf("Name: %s\n- LatestRevision: %s\n- LastModifier: %s\n- UpdateTime: %s", c.Name, c.LatestRevision, c.LastModifier, c.UpdateTime)
+	return fmt.Sprintf("Name: %s\n* LatestRevision: %s\n* LastModifier: %s\n* UpdateTime: %s\n* Resource Limit: %s\n", c.Name, c.LatestRevision, c.LastModifier, c.UpdateTime, c.ResourceLimits)
 }
 
 func (c *Client) getProjectLocation() string {
