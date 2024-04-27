@@ -17,13 +17,15 @@ type Client struct {
 
 type CloudRunService struct {
 	Name           string
+	Image          string
 	LastModifier   string
 	UpdateTime     string
 	LatestRevision string
+	ResourceLimits map[string]string
 }
 
 func (c *CloudRunService) String() string {
-	return fmt.Sprintf("Name: %s\nLatestRevision: %s\nLastModifier: %s\nUpdateTime: %s", c.Name, c.LatestRevision, c.LastModifier, c.UpdateTime)
+	return fmt.Sprintf("Name: %s\n- LatestRevision: %s\n- LastModifier: %s\n- UpdateTime: %s", c.Name, c.LatestRevision, c.LastModifier, c.UpdateTime)
 }
 
 func (c *Client) getProjectLocation() string {
@@ -72,6 +74,8 @@ func (c *Client) GetService(ctx context.Context, serviceName string) (*CloudRunS
 
 	return &CloudRunService{
 		Name:           c.GetServiceNameFromFullname(res.Name),
+		Image:          res.Template.Containers[0].Image,
+		ResourceLimits: res.Template.Containers[0].Resources.Limits,
 		LastModifier:   res.LastModifier,
 		UpdateTime:     res.UpdateTime,
 		LatestRevision: strings.TrimPrefix(res.LatestCreatedRevision, fmt.Sprintf("%s/services/%s/revisions/", projLoc, serviceName)),
