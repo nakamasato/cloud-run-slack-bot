@@ -3,8 +3,8 @@ package slack
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
-	"os"
 	"path"
 	"strings"
 	"sync"
@@ -231,35 +231,30 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	log.Println("visualizing")
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	log.Printf("imgName: %s\n", imgName)
-	xaxis := []string{}
-	for _, val := range *seriesMap {
-		for i := 0; i < len(val); i++ {
-			xaxis = append(xaxis, fmt.Sprintf("%d", i))
-		}
-		break
-	}
-	err = visualize.Visualize("Request Count", "Cloud Run request counts per revision", imgName, &xaxis, seriesMap)
+	// xaxis := []string{}
+	// for _, val := range *seriesMap {
+	// 	for i := 0; i < len(val); i++ {
+	// 		xaxis = append(xaxis, fmt.Sprintf("%d", i))
+	// 	}
+	// 	break
+	// }
+
+	pr, pw := io.Pipe()
+	err = visualize.Visualize(pw)
 	if err != nil {
 		log.Println(err)
 		return nil
 	}
-	file, err := os.Open(imgName)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	if stat, err := file.Stat(); err != nil {
-		return err
-	} else {
-		fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
-			Reader:   file,
-			FileSize: int(stat.Size()),
-			Filename: imgName,
-			Channel:  channelId,
-		})
-		log.Println(fSummary)
-		return err
-	}
+
+	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+		Reader:   pr,
+		FileSize: 100, // random value
+		Filename: imgName,
+		Channel:  channelId,
+	})
+	log.Println(fSummary)
+	return err
+
 }
 
 func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcName string) error {
@@ -308,26 +303,17 @@ func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcN
 }
 
 func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error {
-	imgName := path.Join(h.tmpDir, "sample.png")
-	err := visualize.VisualizeSample(imgName)
+	pr, pw := io.Pipe()
+	err := visualize.VisualizeSample(pw)
 	if err != nil {
 		return err
 	}
-	file, err := os.Open(imgName)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	if stat, err := file.Stat(); err != nil {
-		return err
-	} else {
-		fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
-			Reader:   file,
-			FileSize: int(stat.Size()),
-			Filename: imgName,
-			Channel:  channelId,
-		})
-		log.Println(fSummary)
-		return err
-	}
+	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+		Reader:   pr,
+		FileSize: 100, // random value
+		Filename: "sample.png",
+		Channel:  channelId,
+	})
+	log.Println(fSummary)
+	return err
 }
