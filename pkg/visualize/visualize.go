@@ -51,13 +51,10 @@ func drawLineChart(title, subtitle string, xAxis *[]string, data *monitoring.Tim
 	return line
 }
 
-// Visualize generates a random line chart
-func Visualize(title, subtitle, fileName string, xAxis *[]string, data *monitoring.TimeSeriesMap) {
-	// data := monitoring.TimeSeriesMap{}
-	// data["Category A"] = generateRandomData()
-	// data["Category B"] = generateRandomData()
+// Visualize draw a line chart and export to a file.
+func Visualize(title, subtitle, fileName string, xAxis *[]string, data *monitoring.TimeSeriesMap) error {
 	line := drawLineChart(title, subtitle, xAxis, data)
-	render.MakeChartSnapshot(line.RenderContent(), fileName)
+	return render.MakeChartSnapshot(line.RenderContent(), fileName)
 }
 
 func getLineData(data *monitoring.TimeSeries) *[]opts.LineData {

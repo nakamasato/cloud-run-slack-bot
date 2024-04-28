@@ -235,7 +235,10 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		}
 		break
 	}
-	visualize.Visualize("Request Count", "Cloud Run request counts per revision", imgName, &xaxis, seriesMap)
+	err = visualize.Visualize("Request Count", "Cloud Run request counts per revision", imgName, &xaxis, seriesMap)
+	if err != nil {
+		return nil
+	}
 	file, err := os.Open(imgName)
 	if err != nil {
 		log.Println(err)
