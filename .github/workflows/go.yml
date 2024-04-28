@@ -39,4 +39,4 @@ jobs:
         uses: ko-build/setup-ko@v0.6
 
       - name: Build
-        run: ko build
+        run: ko build . --bare
