@@ -59,7 +59,7 @@ jobs:
       - name: Set up ko
         uses: ko-build/setup-ko@v0.6
         env:
-          KO_DOCKER_REPO: "index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}"
+          KO_DOCKER_REPO: "index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/cloud-run-slack-bot"
         with:
           version: v0.15.0
 
