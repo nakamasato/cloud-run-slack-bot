@@ -80,5 +80,4 @@ jobs:
           echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build
-        run: |
-          ko build . --tags="${{ steps.set_tag.outputs.TAGS }}" --bare
+        run: ko build . --tags="${{ steps.set_tag.outputs.TAGS }}" --bare
