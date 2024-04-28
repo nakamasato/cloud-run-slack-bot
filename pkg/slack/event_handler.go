@@ -2,7 +2,6 @@ package slack
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -92,11 +91,13 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 			return h.list(ctx, e.Channel, selectCurrentServiceAction)
 		case "help", "h":
 			return h.help(ctx, e.Channel, e.User)
+		case "sample":
+			return h.sample(ctx, e.Channel)
 		default:
 			return h.help(ctx, e.Channel, e.User)
 		}
 	}
-	return errors.New(fmt.Sprintf("unsupported event %v", innerEvent.Type))
+	return fmt.Errorf("unsupported event %v", innerEvent.Type)
 }
 
 // HandleInteraction handles Slack interaction events e.g. selectbox, etc.
@@ -116,7 +117,7 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			return h.setCurrentService(ctx, interaction.Channel.ID, interaction.User.ID, action.SelectedOption.Value)
 		}
 	}
-	return errors.New(fmt.Sprintf("unsupported interaction %v", interaction.Type))
+	return fmt.Errorf("unsupported interaction %v", interaction.Type)
 }
 
 func (h *SlackEventHandler) help(ctx context.Context, channelId, userId string) error {
@@ -301,4 +302,29 @@ func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcN
 	}
 	_, _, err = h.client.PostMessageContext(ctx, channelId, msgOptions...)
 	return err
+}
+
+func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error {
+	imgName := fmt.Sprintf("%s/sample.png", h.tmpDir)
+	err := visualize.VisualizeSample(imgName)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(imgName)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	if stat, err := file.Stat(); err != nil {
+		return err
+	} else {
+		fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+			Reader:   file,
+			FileSize: int(stat.Size()),
+			Filename: imgName,
+			Channel:  channelId,
+		})
+		log.Println(fSummary)
+		return err
+	}
 }

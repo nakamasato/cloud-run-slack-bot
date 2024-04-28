@@ -81,7 +81,6 @@ func (c *MonitorCondition) filter() string {
 
 type Client struct {
 	project string
-	config  *MonitorCondition
 	client  *monitoring.MetricClient
 }
 
@@ -234,7 +233,12 @@ func (mc *Client) GetRevisionLatency(ctx context.Context, req *monitoringpb.List
 		}
 
 		if _, ok := latencies[revision]; !ok {
-			latencies[revision] = Latency{}
+			latencies[revision] = Latency{
+				avg: 0,
+				p50: 0,
+				p95: 0,
+				p99: 0,
+			}
 		}
 
 		for i, p := range resp.GetPoints() { // Point per min
