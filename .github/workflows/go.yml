@@ -1,0 +1,78 @@
+name: go
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test -v ./...
+
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v5
+        with:
+          version: v1.57
+
+  build:
+    needs:
+      - test
+      - golangci-lint
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up ko
+        uses: ko-build/setup-ko@v0.6
+        with:
+          version: v0.15.0
+
+      - name: Set image tag
+        id: set_tag
+        run: |
+          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
+            TAGS="pr-${{ github.event.number }}"
+          elif [ "$GITHUB_EVENT_NAME" == "push" ]; then
+            TAGS="$GITHUB_SHA"
+          elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
+            TAGS="$GITHUB_REF_NAME"
+          fi
+
+          echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: ko build . --tags="${{ steps.set_tag.outputs.TAGS }}" --bare
