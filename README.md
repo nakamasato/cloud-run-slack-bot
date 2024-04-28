@@ -14,6 +14,7 @@ Interact with Cloud Run service on Slack.
 
 ### Roles
 
+1. `roles/run.viewer`: To get information of Cloud Run services
 1. `roles/monitoring.viewer`: To get metrics of Cloud Run services
 
 ### Environment Variables
