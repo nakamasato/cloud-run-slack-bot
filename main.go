@@ -6,8 +6,10 @@ import (
 	"os"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrunslackbot"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
-	"github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
+	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
+	"github.com/slack-go/slack"
 )
 
 func main() {
@@ -33,21 +35,17 @@ func main() {
 		log.Fatalf("Failed to create run service: %v", err)
 	}
 
-	var svc slack.SlackService
-	if os.Getenv("SLACK_APP_MODE") == "events" {
-		svc, err = slack.NewSlackEventService(
-			os.Getenv("SLACK_BOT_TOKEN"),
-			rClient,
-			mClient,
-		)
-	} else if os.Getenv("SLACK_APP_MODE") == "socket" {
-		svc, err = slack.NewSlackSocketService(
-			os.Getenv("SLACK_BOT_TOKEN"),
-			os.Getenv("SLACK_APP_TOKEN"),
-			rClient,
-			mClient,
-		)
+	ops := []slack.Option{}
+	if appToken := os.Getenv("SLACK_APP_TOKEN"); appToken != "" {
+		ops = append(ops, slack.OptionAppLevelToken(appToken))
 	}
+	sClient := slack.New(os.Getenv("SLACK_BOT_TOKEN"), ops...)
+	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, os.Getenv("TMP_DIR"))
+	svc, err := cloudrunslackbot.NewCloudRunSlackBotService(
+		sClient,
+		os.Getenv("SLACK_APP_MODE"),
+		handler,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

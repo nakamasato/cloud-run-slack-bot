@@ -56,10 +56,16 @@ type SlackEventHandler struct {
 	rClient *cloudrun.Client
 	// Memory for storing target cloud run service
 	memory *Memory
+	// Temporary directory for storing images
+	tmpDir string
+}
+
+func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Client, mClient *monitoring.Client, tmpDir string) *SlackEventHandler {
+	return &SlackEventHandler{client: client, rClient: rClient, mClient: mClient, memory: NewMemory(), tmpDir: tmpDir}
 }
 
 // NewSlackEventHandler handles AppMention events
-func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) error {
+func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error {
 	ctx := context.Background()
 	innerEvent := event.InnerEvent
 	switch e := innerEvent.Data.(type) {
@@ -72,19 +78,19 @@ func (h *SlackEventHandler) HandleEvents(event *slackevents.EventsAPIEvent) erro
 		log.Printf("command: %s\n", command)
 		currentService, ok := h.memory.Get(e.User)
 		switch command {
-		case "describe":
+		case "describe", "d":
 			if !ok {
 				return h.list(ctx, e.Channel, selectServiceActionForDescribe)
 			}
 			return h.describeService(ctx, e.Channel, currentService)
-		case "metrics":
+		case "metrics", "m":
 			if !ok {
 				return h.list(ctx, e.Channel, selectServiceActionForMetrics)
 			}
 			return h.getServiceMetrics(ctx, e.Channel, currentService)
-		case "set":
+		case "set", "s":
 			return h.list(ctx, e.Channel, selectCurrentServiceAction)
-		case "help":
+		case "help", "h":
 			return h.help(ctx, e.Channel, e.User)
 		default:
 			return h.help(ctx, e.Channel, e.User)
@@ -118,15 +124,15 @@ func (h *SlackEventHandler) help(ctx context.Context, channelId, userId string) 
 		Text: "Available commands:",
 		Fields: []slack.AttachmentField{
 			{
-				Title: "describe",
+				Title: "`describe` or `d`",
 				Value: "describe the target Cloud Run service.\n you can check the latest revision, last modifier, update time, etc.",
 			},
 			{
-				Title: "metrics",
+				Title: "`metrics` or `m`",
 				Value: "show the request count of the target Cloud Run service.\n you can check the request count per revision.",
 			},
 			{
-				Title: "set",
+				Title: "`set` or `s`",
 				Value: "set the target Cloud Run service.\n This is set for each Slack user.",
 			},
 		},
@@ -163,7 +169,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 			Type: slack.MBTSection,
 			Text: &slack.TextBlockObject{
 				Type: slack.PlainTextType,
-				Text: "which service do you want to check?",
+				Text: "Please select a Cloud Run service.",
 			},
 			Accessory: &slack.Accessory{
 				SelectElement: &slack.SelectBlockElement{
@@ -171,7 +177,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 					Type:     slack.OptTypeStatic,
 					Placeholder: &slack.TextBlockObject{
 						Type: slack.PlainTextType,
-						Text: "Select service",
+						Text: "Select a service",
 					},
 					Options: options,
 				},
@@ -185,8 +191,35 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	duration := 24 * time.Hour
 	aggergationPeriod := 1 * time.Hour
 	seriesMap, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggergationPeriod, duration)
+
 	if err != nil {
 		_, _, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
+		return err
+	}
+	if len(*seriesMap) == 0 {
+		svc, err := h.rClient.GetService(ctx, svcName)
+		if err != nil {
+			return err
+		}
+		_, _, err = h.client.PostMessageContext(ctx, channelId,
+			slack.MsgOptionText(fmt.Sprintf("No requests found for last %s. Please check <%s|%s>\n", duration, svc.GetMetricsUrl(), "Cloud Run metrics (GCP Console)"), false),
+			// slack.MsgOptionBlocks(slack.SectionBlock{
+			// 	Type: slack.MBTSection,
+			// 	Text: &slack.TextBlockObject{
+			// 		Type: slack.MarkdownType,
+			// 		Text: fmt.Sprintf("No requests found for last %s.\n", duration),
+			// 	},
+			// 	Accessory: &slack.Accessory{
+			// 		ButtonElement: &slack.ButtonBlockElement{
+			// 			Text: &slack.TextBlockObject{
+			// 				Type: slack.PlainTextType,
+			// 				Text: "metrics",
+			// 			},
+			// 			URL: svc.GetMetricsUrl(),
+			// 		},
+			// 	},
+			// }),
+		)
 		return err
 	}
 	_, _, err = h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText(fmt.Sprintf("requests (last %s) for service:%s\nrequests:\n%s", duration, svcName, seriesMap), false))
@@ -194,7 +227,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		return err
 	}
 	log.Println("visualizing")
-	imgName := fmt.Sprintf("%s-metrics.png", svcName)
+	imgName := fmt.Sprintf("%s/%s-metrics.png", h.tmpDir, svcName)
 	xaxis := []string{}
 	for _, val := range *seriesMap {
 		for i := 0; i < len(val); i++ {
@@ -223,11 +256,46 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 }
 
 func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcName string) error {
-	res, err := h.rClient.GetService(ctx, svcName)
+	msgOptions := []slack.MsgOption{}
+	svc, err := h.rClient.GetService(ctx, svcName)
 	if err != nil {
-		_, _, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
-		return err
+		msgOptions = append(msgOptions, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
+	} else {
+		msgOptions = append(msgOptions, slack.MsgOptionAttachments(slack.Attachment{
+			Fields: []slack.AttachmentField{
+				{
+					Title: "Name",
+					Value: svc.Name,
+					Short: true,
+				},
+				{
+					Title: "LatestRevision",
+					Value: svc.LatestRevision,
+					Short: true,
+				},
+				{
+					Title: "Image",
+					Value: svc.Image,
+					Short: true,
+				},
+				{
+					Title: "LastModifier",
+					Value: svc.LastModifier,
+					Short: true,
+				},
+				{
+					Title: "UpdateTime",
+					Value: svc.UpdateTime.Format("2006/01/02 15:04:05"),
+					Short: true,
+				},
+				{
+					Title: "Resource Limit",
+					Value: fmt.Sprintf("- cpu:%s\n- memory:%s", svc.ResourceLimits["cpu"], svc.ResourceLimits["memory"]),
+					Short: true,
+				},
+			},
+		}))
 	}
-	_, _, err = h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText(res.String(), false))
+	_, _, err = h.client.PostMessageContext(ctx, channelId, msgOptions...)
 	return err
 }

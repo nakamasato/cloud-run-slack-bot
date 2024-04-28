@@ -1,23 +1,29 @@
 # Cloud Run Slack Bot
 
-This is a simple bot that sends a message to a Slack channel when a new revision is deployed to a Cloud Run service.
+This is a simple Slack bot running on Cloud Run with which you can interact with Cloud Run services.
 
-1. trigger (github, cloud run deploy event, slo alert, slack event subscription, etc.)
-1. check status (logs, traces, dependencies, etc.)
-1. send notification (slack message, email, etc)
+![](docs/diagram.drawio.svg)
 
 ## Features
 
-1. Interact with Cloud Run service on Slack.
-    1. Get metrics of the service. (`roles/monitoring.viewer` is required.)
+Interact with Cloud Run service on Slack.
+1. Get metrics of Cloud Run service.
+1. Describe Cloud Run service.
 
-## Environment Variables
+## Cloud Run
 
-1. `PROJECT`: GCP Project ID
-1. `REGION`: GCP Region
+### Roles
+
+1. `roles/monitoring.viewer`: To get metrics of Cloud Run services
+
+### Environment Variables
+
+1. `PROJECT`: GCP Project ID to monitor
+1. `REGION`: GCP Region to monitor
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
 1. `SLACK_OAUTH_TOKEN`: Slack oauth token
 1. `SLACK_APP_MODE`: Slack App Mode (`events` or `socket`)
+1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
 
 ## Slack App
 
@@ -91,6 +97,12 @@ Deploy the image to Cloud Run
 ```
 gcloud run deploy cloud-run-slack-bot --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot --project "$PROJECT" --region "$REGION"
 ```
+
+### Slack Channel Settings
+
+1. Remove preview for console.cloud.google.com
+
+![](docs/slack-channel-preview.png)
 
 ## References
 

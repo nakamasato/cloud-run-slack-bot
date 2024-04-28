@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"google.golang.org/api/run/v2"
 )
@@ -17,15 +18,34 @@ type Client struct {
 
 type CloudRunService struct {
 	Name           string
+	Region         string
+	Project        string
 	Image          string
 	LastModifier   string
-	UpdateTime     string
+	UpdateTime     time.Time
 	LatestRevision string
 	ResourceLimits map[string]string
 }
 
+func (c *CloudRunService) GetMetricsUrl() string {
+	return c.getUrl("metrics")
+}
+
+func (c *CloudRunService) GetYamlUrl() string {
+	return c.getUrl("yaml")
+}
+
+// https://console.cloud.google.com/run/detail/asia-northeast1/cloud-run-slack-bot/<urlPath>?project=<project>
+// Supported urlPath: metrics, slos, logs, revisions, networking, triggers, integrations, yaml
+func (c *CloudRunService) getUrl(urlPath string) string {
+	return fmt.Sprintf("https://console.cloud.google.com/run/detail/%s/%s/%s?project=%s", c.Region, c.Name, urlPath, c.Project)
+}
+
 func (c *CloudRunService) String() string {
-	return fmt.Sprintf("Name: %s\n* LatestRevision: %s\n* LastModifier: %s\n* UpdateTime: %s\n* Resource Limit: %s\n", c.Name, c.LatestRevision, c.LastModifier, c.UpdateTime, c.ResourceLimits)
+	return fmt.Sprintf(
+		"Name: %s\n- LatestRevision: %s\n- Image: %s\n- LastModifier: %s\n- UpdateTime: %s\n- Resource Limit: (cpu:%s, memory:%s)\n",
+		c.Name, c.LatestRevision, c.Image, c.LastModifier, c.UpdateTime, c.ResourceLimits["cpu"], c.ResourceLimits["memory"],
+	)
 }
 
 func (c *Client) getProjectLocation() string {
@@ -72,12 +92,19 @@ func (c *Client) GetService(ctx context.Context, serviceName string) (*CloudRunS
 	}
 	fmt.Printf("Service: %+v\n", res)
 
+	updateTime, err := time.Parse(time.RFC3339Nano, res.UpdateTime) // 2024-04-27T00:56:09.929299Z
+	if err != nil {
+		return nil, err
+	}
+
 	return &CloudRunService{
 		Name:           c.GetServiceNameFromFullname(res.Name),
+		Region:         c.region,
+		Project:        c.project,
 		Image:          res.Template.Containers[0].Image,
 		ResourceLimits: res.Template.Containers[0].Resources.Limits,
 		LastModifier:   res.LastModifier,
-		UpdateTime:     res.UpdateTime,
+		UpdateTime:     updateTime,
 		LatestRevision: strings.TrimPrefix(res.LatestCreatedRevision, fmt.Sprintf("%s/services/%s/revisions/", projLoc, serviceName)),
 	}, nil
 }

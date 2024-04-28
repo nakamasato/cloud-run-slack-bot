@@ -61,6 +61,14 @@ type Latency struct {
 
 type Latencies map[string]Latency
 
+func (l *Latencies) String() string {
+	var s []string
+	for k, v := range *l {
+		s = append(s, fmt.Sprintf("%s:%v", k, v))
+	}
+	return strings.Join(s, "\n")
+}
+
 func (c *MonitorCondition) filter() string {
 	var filters []string
 	for _, f := range c.Filters {
@@ -234,11 +242,10 @@ func (mc *Client) GetRevisionLatency(ctx context.Context, req *monitoringpb.List
 			log.Printf("Point:%d\tstart:%s\tend:%s\tvalue:%d\n", i, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
 			val := p.GetValue().GetInt64Value()
 			requestCount += val
-
 		}
 		loopCnt++
 	}
-	log.Printf("Request count: %d, %s\n", requestCount, latencies)
+	log.Printf("Request count: %d, %s\n", requestCount, latencies.String())
 	return &latencies, nil
 }
 
