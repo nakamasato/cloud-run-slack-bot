@@ -65,7 +65,7 @@ jobs:
         id: set_tag
         run: |
           if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
-            TAGS="pr-$GITHUB_PR_NUMBER"
+            TAGS="pr-${{ github.event.number }}"
           elif [ "$GITHUB_EVENT_NAME" == "push" ]; then
             TAGS="$GITHUB_SHA"
           elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
