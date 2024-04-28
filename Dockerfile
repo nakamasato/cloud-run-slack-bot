@@ -8,7 +8,7 @@ COPY . ./
 
 RUN go build -v -o server
 
-FROM chromedp/headless-shell:latest
+FROM chromedp/headless-shell:126.0.6439.0
 
 COPY --from=builder /app/server /app/server
 
