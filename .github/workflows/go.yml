@@ -86,4 +86,6 @@ jobs:
           echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build
+        env:
+          KO_DOCKER_REPO: ${{ secrets.DOCKERHUB_USERNAME }}
         run: ko build . --tags="${{ steps.set_tag.outputs.TAGS }}" --bare
