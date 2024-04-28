@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+  release:
+    types: [published]
 
 jobs:
   test:
@@ -59,5 +61,18 @@ jobs:
         with:
           version: v0.15.0
 
+      - name: Set image tag
+        id: set_tag
+        run: |
+          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
+            TAGS="pr-$GITHUB_PR_NUMBER"
+          elif [ "$GITHUB_EVENT_NAME" == "push" ]; then
+            TAGS="$GITHUB_SHA"
+          elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
+            TAGS="$GITHUB_REF_NAME"
+          fi
+
+          echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
+
       - name: Build
-        run: ko build . --bare
+        run: ko build . --tags="${{ steps.set_tag.outputs.TAGS }}"
