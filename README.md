@@ -113,10 +113,8 @@ gcloud run deploy cloud-run-slack-bot --image $REGION-docker.pkg.dev/$PROJECT/cl
     1. [GolangからSlackに画像を投稿する](https://qiita.com/RuyPKG/items/5ac07ddc04432ee7641b)
     1. [GoでインタラクティブなSlack Botを作る2通りのサンプル（Events API + Interactive Component / Socket Mode）](https://qiita.com/daitai-daidai/items/71f97d9cdb0e2ddf9781)
 1. [Querying metrics from Google Cloud Monitoring in Golang](https://medium.com/google-cloud/querying-metrics-from-google-cloud-monitoring-in-golang-2631ee3d33c1)
-
 1. Go packages:
     1. https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest
     1. https://pkg.go.dev/github.com/slack-go/slack/socketmode#Client
     1. https://pkg.go.dev/google.golang.org/api/run/v2
-    1. https://github.com/llgcode/draw2d/tree/master
-
+    1. https://pkg.go.dev/github.com/go-echarts/go-echarts/v2/charts
