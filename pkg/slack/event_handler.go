@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -228,7 +229,8 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		return err
 	}
 	log.Println("visualizing")
-	imgName := fmt.Sprintf("%s/%s-metrics.png", h.tmpDir, svcName)
+	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
+	log.Printf("imgName: %s\n", imgName)
 	xaxis := []string{}
 	for _, val := range *seriesMap {
 		for i := 0; i < len(val); i++ {
@@ -238,6 +240,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	}
 	err = visualize.Visualize("Request Count", "Cloud Run request counts per revision", imgName, &xaxis, seriesMap)
 	if err != nil {
+		log.Println(err)
 		return nil
 	}
 	file, err := os.Open(imgName)
@@ -305,7 +308,7 @@ func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcN
 }
 
 func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error {
-	imgName := fmt.Sprintf("%s/sample.png", h.tmpDir)
+	imgName := path.Join(h.tmpDir, "sample.png")
 	err := visualize.VisualizeSample(imgName)
 	if err != nil {
 		return err
