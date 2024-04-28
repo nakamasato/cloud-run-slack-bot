@@ -43,9 +43,6 @@ jobs:
     needs:
       - test
       - golangci-lint
-    permissions:
-      contents: read
-      packages: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -73,7 +70,8 @@ jobs:
         id: set_tag
         run: |
           if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
-            TAGS="pr-${{ github.event.number }}-${{ github.event.pull_request.head.sha }}"
+            LATEST_SHA="${{ github.event.pull_request.head.sha }}"
+            TAGS="pr-${{ github.event.number }}-${LATEST_SHA:0:7}"
           elif [ "$GITHUB_EVENT_NAME" == "push" ]; then
             TAGS="${GITHUB_SHA:0:7}"
           elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
