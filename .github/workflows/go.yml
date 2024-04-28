@@ -68,7 +68,7 @@ jobs:
       - name: Set up ko
         uses: ko-build/setup-ko@v0.6
         env:
-          KO_DOCKER_REPO: ${{ secrets.DOCKERHUB_USERNAME }}
+          KO_DOCKER_REPO: "docker.io/${{ secrets.DOCKERHUB_USERNAME }}"
         with:
           version: v0.15.0
 
@@ -82,10 +82,8 @@ jobs:
           elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
             TAGS="$GITHUB_REF_NAME"
           fi
-
           echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build
-        env:
-          KO_DOCKER_REPO: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: ko build . --tags="${{ steps.set_tag.outputs.TAGS }}" --bare
+        run: |
+          ko build . --tags="${{ steps.set_tag.outputs.TAGS }}" --bare
