@@ -29,6 +29,9 @@ func TestMakeChartTimeSeries(t *testing.T) {
 			},
 			want: &chart.TimeSeries{
 				Name: "test",
+				Style: chart.Style{
+					StrokeColor: chart.GetDefaultColor(0).WithAlpha(64),
+				},
 				XValues: []time.Time{
 					time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC),
 					time.Date(2021, 1, 1, 0, 10, 0, 0, time.UTC),
@@ -43,7 +46,7 @@ func TestMakeChartTimeSeries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := makeChartTimeSeries(tt.name, tt.startTime, tt.endTime, tt.interval, tt.timeSeries); !reflect.DeepEqual(got, tt.want) {
+			if got := makeChartTimeSeries(0, tt.name, tt.startTime, tt.endTime, tt.interval, tt.timeSeries); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("XValues = %v, want %v", got, tt.want)
 			}
 		})

@@ -108,10 +108,11 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 		},
 		// PageSize: int32(10000), 100,000 if empty
 	}
-	return mc.GetRevisionRequestCount(ctx, req)
+	return mc.GetRequestCountByLabel(ctx, "response_code_class", "metric", req)
 }
 
-func (mc *Client) GetRevisionRequestCount(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeriesMap, error) {
+// labelType: metric or resource
+func (mc *Client) GetRequestCountByLabel(ctx context.Context, label, labelType string, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeriesMap, error) {
 	it := mc.client.ListTimeSeries(ctx, req)
 	var requestCount int64
 	var loopCnt int
@@ -134,22 +135,32 @@ func (mc *Client) GetRevisionRequestCount(ctx context.Context, req *monitoringpb
 			continue
 		}
 		log.Printf("resp %v\n", resp.String())
-		revision, ok := resp.Resource.Labels["revision_name"]
-		if seriesMap[revision] == nil {
-			seriesMap[revision] = TimeSeries{}
+		var labelValue string
+		var ok bool
+		switch labelType {
+		case "metric":
+			labelValue, ok = resp.Metric.Labels[label]
+		case "resource":
+			labelValue, ok = resp.Resource.Labels[label]
+		default:
+			log.Printf("Invalid label type %s\n", labelType)
+			return nil, fmt.Errorf("Invalid label type %s", labelType)
+		}
+		if seriesMap[labelValue] == nil {
+			seriesMap[labelValue] = TimeSeries{}
 		}
 		if !ok {
-			log.Println("revision_name not found")
+			log.Printf("Metric label '%s' not found", label)
 			continue
 		}
 
 		for i, p := range resp.GetPoints() { // Point per min
 			log.Println(p.Value.String())
-			log.Printf("Point:%d\tRev:%s\tstart:%s\tend:%s\tvalue:%d\n", i, revision, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
+			log.Printf("Point:%d\t%s:%s\tstart:%s\tend:%s\tvalue:%d\n", i, label, labelValue, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
 			val := p.GetValue().GetInt64Value()
 			requestCount += val
-			cnt[revision] += val
-			seriesMap[revision] = append(seriesMap[revision], Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
+			cnt[labelValue] += val
+			seriesMap[labelValue] = append(seriesMap[labelValue], Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
 		}
 		loopCnt++
 	}

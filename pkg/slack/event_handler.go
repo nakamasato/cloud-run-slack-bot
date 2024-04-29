@@ -191,7 +191,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName string) error {
 	duration := 24 * time.Hour
-	aggregationPeriod := 5 * time.Minute
+	aggregationPeriod := 30 * time.Minute
 	now := time.Now().UTC()
 	endTime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
 
@@ -236,7 +236,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	log.Printf("imgName: %s\n", imgName)
 
-	fileSize, err := visualize.Visualize(imgName, startTime, endTime, seriesMap)
+	fileSize, err := visualize.Visualize("Request Count", imgName, startTime, endTime, aggregationPeriod, seriesMap)
 	if err != nil {
 		log.Println(err)
 		return nil
