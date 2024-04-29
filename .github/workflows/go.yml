@@ -53,10 +53,27 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set config
+        id: set_config
+        run: |
+          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
+            LATEST_SHA="${{ github.event.pull_request.head.sha }}"
+            TAGS="pr-${{ github.event.number }}-${LATEST_SHA:0:7}"
+            REPO=cloud-run-slack-bot-dev
+          elif [ "$GITHUB_EVENT_NAME" == "push" ]; then
+            TAGS="${GITHUB_SHA:0:7}"
+            REPO=cloud-run-slack-bot-dev
+          elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
+            TAGS="$GITHUB_REF_NAME"
+            REPO=cloud-run-slack-bot
+          fi
+          echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "REPO=$REPO" >> "$GITHUB_OUTPUT"
+
       - name: Set up ko
         uses: ko-build/setup-ko@v0.6
         env:
-          KO_DOCKER_REPO: "index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/cloud-run-slack-bot"
+          KO_DOCKER_REPO: "index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.set_config.outputs.REPO }}"
         with:
           version: v0.15.0
 
@@ -66,18 +83,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set image tag
-        id: set_tag
-        run: |
-          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
-            LATEST_SHA="${{ github.event.pull_request.head.sha }}"
-            TAGS="pr-${{ github.event.number }}-${LATEST_SHA:0:7}"
-          elif [ "$GITHUB_EVENT_NAME" == "push" ]; then
-            TAGS="${GITHUB_SHA:0:7}"
-          elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
-            TAGS="$GITHUB_REF_NAME"
-          fi
-          echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
-
       - name: Build
-        run: ko build . --tags="${{ steps.set_tag.outputs.TAGS }}" --bare
+        run: ko build . --tags="${{ steps.set_config.outputs.TAGS }}" --bare
