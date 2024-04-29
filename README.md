@@ -74,7 +74,7 @@ Deploy to Cloud Run
 gcloud run deploy cloud-run-slack-bot \
     --set-secrets SLACK_BOT_TOKEN=slack-bot-token:latest \
     --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp" \
-    --image nakamasato/cloud-run-slack-bot:pr-2-52a60cf \
+    --image nakamasato/cloud-run-slack-bot:0.0.2 \
     --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
     --project "$PROJECT" --region "$REGION"
 ```
