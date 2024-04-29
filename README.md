@@ -22,29 +22,11 @@ Interact with Cloud Run service on Slack.
 1. `PROJECT`: GCP Project ID to monitor
 1. `REGION`: GCP Region to monitor
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
-1. `SLACK_OAUTH_TOKEN`: Slack oauth token
+1. `SLACK_APP_TOKEN` (optional): Slack oauth token (required for `SLACK_APP_MODE=socket`)
 1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
 
-## Slack App
-
-Necessary scopes:
-- [mention:read](https://api.slack.com/scopes/app_mentions:read)
-- [chat:write](https://api.slack.com/scopes/chat:write)
-- [files:write](https://api.slack.com/scopes/files:write)
-
-## Local Run
-
-```
-go run main.go
-```
-
-TODO:
-```
-curl -H 'Content-Type: application/json' -X POST -d '{"type": "event_callback", "event": {"type": "app_mention", "user": "xx", "reaction": "memo", "item_user": "xx", "item": {"type": "message", "channel": "CHANNEL", "ts": "1701919197.246629"}, "event_ts": "1704502151.000000"}}' localhost:8080/slack/events
-```
-
-## Deploy
+### Deploy
 
 ```
 PROJECT=your-project
@@ -79,7 +61,33 @@ gcloud run deploy cloud-run-slack-bot \
     --project "$PROJECT" --region "$REGION"
 ```
 
-### Slack Channel Settings
+## Slack App
+
+1. Create a new Slack App
+    - [https://api.slack.com/apps](https://api.slack.com/apps)
+1. Add the following scopes:
+    - [mention:read](https://api.slack.com/scopes/app_mentions:read)
+    - [chat:write](https://api.slack.com/scopes/chat:write)
+    - [files:write](https://api.slack.com/scopes/files:write)
+1. Install the app to your workspace
+1. Event Subscriptions
+    - Request URL: `https://your-cloud-run-url/slack/events`
+    - Subscribe to bot events: `app_mention`
+1. Interactivity & Shortcuts
+    - Request URL: `https://your-cloud-run-url/slack/interactivity`
+
+## Local Run
+
+```
+go run main.go
+```
+
+TODO:
+```
+curl -H 'Content-Type: application/json' -X POST -d '{"type": "event_callback", "event": {"type": "app_mention", "user": "xx", "reaction": "memo", "item_user": "xx", "item": {"type": "message", "channel": "CHANNEL", "ts": "1701919197.246629"}, "event_ts": "1704502151.000000"}}' localhost:8080/slack/events
+```
+
+## Slack Channel Settings
 
 1. Remove preview for console.cloud.google.com
 
@@ -97,4 +105,4 @@ gcloud run deploy cloud-run-slack-bot \
     1. https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest
     1. https://pkg.go.dev/github.com/slack-go/slack/socketmode#Client
     1. https://pkg.go.dev/google.golang.org/api/run/v2
-    1. https://pkg.go.dev/github.com/go-echarts/go-echarts/v2/charts
+    1. https://pkg.go.dev/github.com/wcharczuk/go-chart
