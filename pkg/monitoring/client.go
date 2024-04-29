@@ -98,7 +98,7 @@ func NewMonitoringClient(project string) (*Client, error) {
 	return &Client{project: project, client: client}, nil
 }
 
-func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service string, aggregationPeriodInSec, duration time.Duration) (*TimeSeriesMap, error) {
+func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service string, aggregationPeriod, duration time.Duration) (*TimeSeriesMap, error) {
 	monCon := MonitorCondition{
 		Project: mc.project,
 		Filters: []MonitorFilter{
@@ -106,7 +106,9 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 			{"metric.type": "run.googleapis.com/request_count"},
 		},
 	}
-	endtime := time.Now().UTC() // TODO: set based on aggregationPeriodInSec
+	now := time.Now().UTC()
+	endtime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
+
 	startTime := endtime.Add(-1 * duration).UTC()
 	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
 	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endtime)
@@ -121,8 +123,8 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 			EndTime:   &timestamppb.Timestamp{Seconds: endtime.Unix()},
 		},
 		Aggregation: &monitoringpb.Aggregation{
-			AlignmentPeriod:  &durationpb.Duration{Seconds: int64(aggregationPeriodInSec.Seconds())}, // The value must be at least 60 seconds.
-			PerSeriesAligner: monitoringpb.Aggregation_ALIGN_SUM,                                     // sum for request count
+			AlignmentPeriod:  &durationpb.Duration{Seconds: int64(aggregationPeriod.Seconds())}, // The value must be at least 60 seconds.
+			PerSeriesAligner: monitoringpb.Aggregation_ALIGN_SUM,                                // sum for request count
 			GroupByFields:    []string{"resource.revision_name"},
 		},
 		// PageSize: int32(10000), 100,000 if empty

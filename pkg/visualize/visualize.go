@@ -1,8 +1,6 @@
 package visualize
 
 import (
-	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -13,23 +11,17 @@ import (
 // Visualize draw a line chart and export to a file.
 // Currently only supports hourly data for recent 24 hours.
 func Visualize(imgFile string, seriesMap *monitoring.TimeSeriesMap) (int64, error) {
-	xaxis := []float64{}
+	xaxis := []time.Time{}
 	yaxis := []float64{}
 	series := []chart.Series{}
-	now := time.Now()
+	// now := time.Now()
 	i := 0
 	for name, ts := range *seriesMap {
-		hour2val := map[int]float64{}
 		for _, p := range ts {
-			hour2val[p.Time.Hour()] += p.Val
+			xaxis = append(xaxis, p.Time)
+			yaxis = append(yaxis, p.Val)
 		}
-		for j := 23; j >=0; j-- {
-			t := now.Add(-time.Duration(j) * time.Hour)
-			log.Printf("name: %s, xaxis: %d, yaxis: %d\n", name, t.Hour(), hour2val[t.Hour()])
-			xaxis = append(xaxis, float64(t.Hour()))
-			yaxis = append(yaxis, hour2val[t.Hour()])
-		}
-		series = append(series, chart.ContinuousSeries{
+		series = append(series, chart.TimeSeries{
 			Name: name,
 			Style: chart.Style{
 				StrokeColor: chart.GetDefaultColor(i).WithAlpha(64),
@@ -39,16 +31,16 @@ func Visualize(imgFile string, seriesMap *monitoring.TimeSeriesMap) (int64, erro
 		})
 		i++
 	}
-	ticks := []chart.Tick{}
-	for i := 23; i >= 0; i-- {
-		t := now.Add(-time.Duration(i) * time.Hour)
-		ticks = append(ticks, chart.Tick{Value: float64(t.Hour()), Label: fmt.Sprintf("%d:00", t.Hour())})
-	}
+	// ticks := []chart.Tick{}
+	// for i := 23; i >= 0; i-- {
+	// 	t := now.Add(-time.Duration(i) * time.Hour)
+	// 	ticks = append(ticks, chart.Tick{Value: float64(t.Hour()), Label: fmt.Sprintf("%d:00", t.Hour())})
+	// }
 	graph := chart.Chart{
-		XAxis: chart.XAxis{
-			Name:  "Time",
-			Ticks: ticks,
-		},
+		// XAxis: chart.XAxis{
+		// 	Name:  "Time",
+		// 	Ticks: ticks,
+		// },
 		Series: series,
 	}
 

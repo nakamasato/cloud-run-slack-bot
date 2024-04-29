@@ -191,7 +191,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName string) error {
 	duration := 24 * time.Hour
-	aggergationPeriod := 1 * time.Hour
+	aggergationPeriod := 5 * time.Minute
 	seriesMap, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggergationPeriod, duration)
 
 	if err != nil {
