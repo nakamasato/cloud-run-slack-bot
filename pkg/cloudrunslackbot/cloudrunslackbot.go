@@ -12,10 +12,10 @@ type CloudRunSlackBotService interface {
 }
 
 func NewCloudRunSlackBotService(sClient *slack.Client, slackMode string, handler *slackinternal.SlackEventHandler) (CloudRunSlackBotService, error) {
-	if slackMode == "events" {
+	if slackMode == "http" {
 		return NewCloudRunSlackBotHttp(sClient, handler)
 	} else if slackMode == "socket" {
 		return NewCloudRunSlackBotSocket(sClient, handler)
 	}
-	return nil, errors.New("slackMode must be either 'events' or 'socket'")
+	return nil, errors.New("slackMode must be either 'http' or 'socket'")
 }

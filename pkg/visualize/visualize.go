@@ -1,87 +1,75 @@
 package visualize
 
 import (
-	"log"
-	"math/rand"
+	"fmt"
+	"os"
+	"time"
 
-	"github.com/go-echarts/go-echarts/v2/charts"
-	"github.com/go-echarts/go-echarts/v2/opts"
-	"github.com/go-echarts/snapshot-chromedp/render"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
+	"github.com/wcharczuk/go-chart/v2"
 )
-
-// generate random data
-func generateRandomData() *monitoring.TimeSeries {
-	items := monitoring.TimeSeries{}
-	for i := 0; i < 7; i++ {
-		items = append(items, int64(rand.Intn(300))) // opts.LineData{Value: rand.Intn(300)}
-	}
-	return &items
-}
-
-var (
-	weeks = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
-)
-
-func drawLineChart(title, subtitle string, xAxis *[]string, data *monitoring.TimeSeriesMap) *charts.Line {
-	line := charts.NewLine()
-	line.SetGlobalOptions(
-		charts.WithInitializationOpts(opts.Initialization{
-			BackgroundColor: "#FFFFFF",
-		}),
-		// Don't forget disable the Animation
-		charts.WithAnimation(false),
-		charts.WithTitleOpts(opts.Title{
-			Title:    title,
-			Subtitle: subtitle,
-			Right:    "40%",
-		}),
-		charts.WithLegendOpts(opts.Legend{Right: "80%"}),
-	)
-	if xAxis != nil {
-		line.SetXAxis(xAxis)
-	}
-	for name, items := range *data {
-		data := getLineData(&items)
-		log.Printf("name: %s, data: %v\n", name, data)
-		line.AddSeries(name, *data)
-	}
-	return line
-}
 
 // Visualize draw a line chart and export to a file.
-func Visualize(title, subtitle, fileName string, xAxis *[]string, data *monitoring.TimeSeriesMap) error {
-	line := drawLineChart(title, subtitle, xAxis, data)
-	return render.MakeChartSnapshot(line.RenderContent(), fileName)
-}
-
-func VisualizeSample(fileName string) error {
-	line := charts.NewLine()
-	line.SetGlobalOptions(
-		charts.WithInitializationOpts(opts.Initialization{
-			BackgroundColor: "#FFFFFF",
-		}),
-		// Don't forget disable the Animation
-		charts.WithAnimation(false),
-		charts.WithTitleOpts(opts.Title{
-			Title:    "Line-Chart",
-			Subtitle: "Example Subtitle",
-			Right:    "40%",
-		}),
-		charts.WithLegendOpts(opts.Legend{Right: "80%"}),
-	)
-	line.SetXAxis(weeks).
-		AddSeries("A", *getLineData(generateRandomData())).
-		AddSeries("B", *getLineData(generateRandomData())).
-		AddSeries("C", *getLineData(generateRandomData())).
-		AddSeries("D", *getLineData(generateRandomData()))
-	return render.MakeChartSnapshot(line.RenderContent(), fileName)
-}
-
-func getLineData(data *monitoring.TimeSeries) *[]opts.LineData {
-	items := make([]opts.LineData, 0)
-	for i, v := range *data {
-		items = append(items, opts.LineData{Value: v, XAxisIndex: i})
+// Currently only supports hourly data for recent 24 hours.
+func Visualize(imgFile string, seriesMap *monitoring.TimeSeriesMap) (int64, error) {
+	xaxis := []float64{}
+	yaxis := []float64{}
+	series := []chart.Series{}
+	for name, ts := range *seriesMap {
+		for _, p := range ts {
+			xaxis = append(xaxis, float64(p.Time.Hour()))
+			yaxis = append(yaxis, p.Val)
+		}
+		series = append(series, chart.ContinuousSeries{
+			Name:    name,
+			XValues: xaxis,
+			YValues: yaxis,
+		})
 	}
-	return &items
+	now := time.Now()
+	ticks := []chart.Tick{}
+	for i := 23; i >= 0; i-- {
+		t := now.Add(-time.Duration(i) * time.Hour)
+		ticks = append(ticks, chart.Tick{Value: float64(t.Hour()), Label: fmt.Sprintf("%d:00", t.Hour())})
+	}
+	graph := chart.Chart{
+		XAxis: chart.XAxis{
+			Name:  "Time",
+			Ticks: ticks,
+		},
+		Series: series,
+	}
+
+	f, err := os.Create(imgFile)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	err = graph.Render(chart.PNG, f)
+	if err != nil {
+		return 0, err
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return stat.Size(), nil
+}
+
+func VisualizeSample(imgFile string) error {
+	graph := chart.Chart{
+		Series: []chart.Series{
+			chart.ContinuousSeries{
+				XValues: []float64{1.0, 2.0, 3.0, 4.0},
+				YValues: []float64{1.0, 2.0, 3.0, 4.0},
+			},
+		},
+	}
+
+	f, err := os.Create(imgFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return graph.Render(chart.PNG, f)
 }

@@ -23,7 +23,7 @@ Interact with Cloud Run service on Slack.
 1. `REGION`: GCP Region to monitor
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
 1. `SLACK_OAUTH_TOKEN`: Slack oauth token
-1. `SLACK_APP_MODE`: Slack App Mode (`events` or `socket`)
+1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
 
 ## Slack App
@@ -68,35 +68,15 @@ gcloud projects add-iam-policy-binding $PROJECT \
     --member=serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com --role=roles/monitoring.viewer
 ```
 
-Build a container image
-
-```
-gcloud builds submit . --pack "image=$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot" --project ${PROJECT}
-```
-
-Deploy the image to Cloud Run
+Deploy to Cloud Run
 
 ```
 gcloud run deploy cloud-run-slack-bot \
     --set-secrets SLACK_BOT_TOKEN=slack-bot-token:latest \
-    --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=events" \
-    --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot \
+    --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp" \
+    --image nakamasato/cloud-run-slack-bot:0.0.2 \
     --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
     --project "$PROJECT" --region "$REGION"
-```
-
-### Deploy new version
-
-Build a container image
-
-```
-gcloud builds submit . --pack "image=$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot" --project ${PROJECT}
-```
-
-Deploy the image to Cloud Run
-
-```
-gcloud run deploy cloud-run-slack-bot --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot --project "$PROJECT" --region "$REGION"
 ```
 
 ### Slack Channel Settings
