@@ -31,6 +31,7 @@ func TestMakeChartTimeSeries(t *testing.T) {
 				Name: "test",
 				Style: chart.Style{
 					StrokeColor: chart.GetDefaultColor(0).WithAlpha(64),
+					FillColor:   chart.GetDefaultColor(0).WithAlpha(64),
 				},
 				XValues: []time.Time{
 					time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC),

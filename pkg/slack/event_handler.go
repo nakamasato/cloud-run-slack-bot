@@ -191,7 +191,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName string) error {
 	duration := 24 * time.Hour
-	aggregationPeriod := 30 * time.Minute
+	aggregationPeriod := 5 * time.Minute
 	now := time.Now().UTC()
 	endTime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
 
