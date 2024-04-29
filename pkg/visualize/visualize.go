@@ -2,6 +2,7 @@ package visualize
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -15,18 +16,29 @@ func Visualize(imgFile string, seriesMap *monitoring.TimeSeriesMap) (int64, erro
 	xaxis := []float64{}
 	yaxis := []float64{}
 	series := []chart.Series{}
+	now := time.Now()
+	i := 0
 	for name, ts := range *seriesMap {
+		hour2val := map[int]float64{}
 		for _, p := range ts {
-			xaxis = append(xaxis, float64(p.Time.Hour()))
-			yaxis = append(yaxis, p.Val)
+			hour2val[p.Time.Hour()] += p.Val
+		}
+		for j := 23; j >=0; j-- {
+			t := now.Add(-time.Duration(j) * time.Hour)
+			log.Printf("name: %s, xaxis: %d, yaxis: %d\n", name, t.Hour(), hour2val[t.Hour()])
+			xaxis = append(xaxis, float64(t.Hour()))
+			yaxis = append(yaxis, hour2val[t.Hour()])
 		}
 		series = append(series, chart.ContinuousSeries{
-			Name:    name,
+			Name: name,
+			Style: chart.Style{
+				StrokeColor: chart.GetDefaultColor(i).WithAlpha(64),
+			},
 			XValues: xaxis,
 			YValues: yaxis,
 		})
+		i++
 	}
-	now := time.Now()
 	ticks := []chart.Tick{}
 	for i := 23; i >= 0; i-- {
 		t := now.Add(-time.Duration(i) * time.Hour)
