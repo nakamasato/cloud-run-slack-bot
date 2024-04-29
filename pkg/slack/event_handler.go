@@ -3,8 +3,8 @@ package slack
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -231,24 +231,19 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	log.Println("visualizing")
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	log.Printf("imgName: %s\n", imgName)
-	// xaxis := []string{}
-	// for _, val := range *seriesMap {
-	// 	for i := 0; i < len(val); i++ {
-	// 		xaxis = append(xaxis, fmt.Sprintf("%d", i))
-	// 	}
-	// 	break
-	// }
 
-	pr, pw := io.Pipe()
-	err = visualize.Visualize(pw)
+	fileSize, err := visualize.Visualize(imgName, seriesMap)
 	if err != nil {
 		log.Println(err)
 		return nil
 	}
-
+	file, err := os.Open(imgName)
+	if err != nil {
+		return err
+	}
 	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
-		Reader:   pr,
-		FileSize: 100, // random value
+		Reader:   file,
+		FileSize: int(fileSize),
 		Filename: imgName,
 		Channel:  channelId,
 	})
@@ -303,15 +298,23 @@ func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcN
 }
 
 func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error {
-	pr, pw := io.Pipe()
-	err := visualize.VisualizeSample(pw)
+	imgName := path.Join(h.tmpDir, "sample.png")
+	err := visualize.VisualizeSample(imgName)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(imgName)
+	if err != nil {
+		return err
+	}
+	stat, err := file.Stat()
 	if err != nil {
 		return err
 	}
 	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
-		Reader:   pr,
-		FileSize: 100, // random value
-		Filename: "sample.png",
+		Reader:   file,
+		FileSize: int(stat.Size()), // random value
+		Filename: imgName,
 		Channel:  channelId,
 	})
 	log.Println(fSummary)

@@ -32,12 +32,16 @@ func (c Counter) String() string {
 	return strings.Join(s, "\n")
 }
 
-type TimeSeries []interface{}
+type Point struct {
+	Time time.Time
+	Val  float64
+}
+type TimeSeries []Point
 
 func (ts TimeSeries) String() string {
 	var s []string
 	for _, v := range ts {
-		s = append(s, fmt.Sprintf("%v", v))
+		s = append(s, fmt.Sprintf("%v", v.Val))
 	}
 	return strings.Join(s, ",")
 }
@@ -195,7 +199,7 @@ func (mc *Client) GetRevisionRequestCount(ctx context.Context, req *monitoringpb
 			val := p.GetValue().GetInt64Value()
 			requestCount += val
 			cnt[revision] += val
-			seriesMap[revision] = append(seriesMap[revision], val)
+			seriesMap[revision] = append(seriesMap[revision], Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
 		}
 		loopCnt++
 	}

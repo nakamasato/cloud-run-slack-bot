@@ -36,18 +36,23 @@ func main() {
 	}
 
 	ops := []slack.Option{}
+
 	if appToken := os.Getenv("SLACK_APP_TOKEN"); appToken != "" {
 		ops = append(ops, slack.OptionAppLevelToken(appToken))
 	}
+
 	sClient := slack.New(os.Getenv("SLACK_BOT_TOKEN"), ops...)
 	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, os.Getenv("TMP_DIR"))
 	svc, err := cloudrunslackbot.NewCloudRunSlackBotService(
+
 		sClient,
 		os.Getenv("SLACK_APP_MODE"),
 		handler,
 	)
+
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	svc.Run()
 }
