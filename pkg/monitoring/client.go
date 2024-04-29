@@ -41,7 +41,7 @@ type TimeSeries []Point
 func (ts TimeSeries) String() string {
 	var s []string
 	for _, v := range ts {
-		s = append(s, fmt.Sprintf("%v", v.Val))
+		s = append(s, fmt.Sprintf("t:%s:c:%v", v.Time.Format(time.TimeOnly), v.Val))
 	}
 	return strings.Join(s, ",")
 }
@@ -51,23 +51,6 @@ type TimeSeriesMap map[string]TimeSeries
 func (ts TimeSeriesMap) String() string {
 	var s []string
 	for k, v := range ts {
-		s = append(s, fmt.Sprintf("%s:%v", k, v))
-	}
-	return strings.Join(s, "\n")
-}
-
-type Latency struct {
-	avg float64
-	p50 float64
-	p95 float64
-	p99 float64
-}
-
-type Latencies map[string]Latency
-
-func (l *Latencies) String() string {
-	var s []string
-	for k, v := range *l {
 		s = append(s, fmt.Sprintf("%s:%v", k, v))
 	}
 	return strings.Join(s, "\n")
@@ -98,7 +81,7 @@ func NewMonitoringClient(project string) (*Client, error) {
 	return &Client{project: project, client: client}, nil
 }
 
-func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service string, aggregationPeriod, duration time.Duration) (*TimeSeriesMap, error) {
+func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service string, aggregationPeriod time.Duration, startTime, endTime time.Time) (*TimeSeriesMap, error) {
 	monCon := MonitorCondition{
 		Project: mc.project,
 		Filters: []MonitorFilter{
@@ -106,12 +89,8 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 			{"metric.type": "run.googleapis.com/request_count"},
 		},
 	}
-	now := time.Now().UTC()
-	endtime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
-
-	startTime := endtime.Add(-1 * duration).UTC()
 	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
-	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endtime)
+	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endTime)
 	// monitoringpb.Aggregation_ALIGN_SUM
 	// monitoringpb.Aggregation_ALIGN_RATE
 	// monitoringpb.Aggregation_ALIGN_PERCENTILE_99
@@ -120,7 +99,7 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 		Filter: monCon.filter(),
 		Interval: &monitoringpb.TimeInterval{
 			StartTime: &timestamppb.Timestamp{Seconds: startTime.Unix()},
-			EndTime:   &timestamppb.Timestamp{Seconds: endtime.Unix()},
+			EndTime:   &timestamppb.Timestamp{Seconds: endTime.Unix()},
 		},
 		Aggregation: &monitoringpb.Aggregation{
 			AlignmentPeriod:  &durationpb.Duration{Seconds: int64(aggregationPeriod.Seconds())}, // The value must be at least 60 seconds.
@@ -130,37 +109,6 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 		// PageSize: int32(10000), 100,000 if empty
 	}
 	return mc.GetRevisionRequestCount(ctx, req)
-}
-
-// Not ready
-func (mc *Client) GetCloudRunServiceLatency(ctx context.Context, service string, duration time.Duration) (*Latencies, error) {
-	monCon := MonitorCondition{
-		Project: mc.project,
-		Filters: []MonitorFilter{
-			{"resource.labels.service_name": service},
-			{"metric.type": "run.googleapis.com/request_latencies"},
-		},
-	}
-
-	endtime := time.Now().UTC()
-	startTime := endtime.Add(-1 * duration).UTC()
-	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
-	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endtime)
-	req := &monitoringpb.ListTimeSeriesRequest{
-		Name:   fmt.Sprintf("projects/%s", mc.project),
-		Filter: monCon.filter(),
-		Interval: &monitoringpb.TimeInterval{
-			StartTime: &timestamppb.Timestamp{Seconds: startTime.Unix()},
-			EndTime:   &timestamppb.Timestamp{Seconds: endtime.Unix()},
-		},
-		Aggregation: &monitoringpb.Aggregation{
-			AlignmentPeriod:  &durationpb.Duration{Seconds: 60},            // The value must be at least 60 seconds.
-			PerSeriesAligner: monitoringpb.Aggregation_ALIGN_PERCENTILE_99, // sum for request count
-			GroupByFields:    []string{"resource.revision_name"},
-		},
-		// PageSize: int32(10000), 100,000 if empty
-	}
-	return mc.GetRevisionLatency(ctx, req) // TODO: latency should not sum up like request count
 }
 
 func (mc *Client) GetRevisionRequestCount(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeriesMap, error) {
@@ -205,58 +153,8 @@ func (mc *Client) GetRevisionRequestCount(ctx context.Context, req *monitoringpb
 		}
 		loopCnt++
 	}
-	log.Printf("Request count: %d, %s, %s\n", requestCount, cnt, seriesMap)
+	log.Printf("Request count:%d\nCounter:\n%s\nseriesMap:\n%s\n", requestCount, cnt, seriesMap)
 	return &seriesMap, nil
-}
-
-func (mc *Client) GetRevisionLatency(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*Latencies, error) {
-
-	it := mc.client.ListTimeSeries(ctx, req)
-	var requestCount int64
-	var loopCnt int
-	latencies := Latencies{}
-	for {
-		resp, err := it.Next()
-		if err == iterator.Done {
-			log.Printf("iterator.Done %d\n", loopCnt)
-			break
-		}
-		pageInfo := it.PageInfo()
-		log.Printf("[page info] token:%s\tMaxSize:%d\n", pageInfo.Token, pageInfo.MaxSize)
-		if err != nil {
-			log.Printf("err %v\n", err)
-			return nil, err
-		}
-		if resp == nil {
-			log.Println("nil")
-			continue
-		}
-		log.Printf("resp %v\n", resp.String())
-		revision, ok := resp.Resource.Labels["revision_name"]
-		if !ok {
-			log.Println("revision_name not found")
-			continue
-		}
-
-		if _, ok := latencies[revision]; !ok {
-			latencies[revision] = Latency{
-				avg: 0,
-				p50: 0,
-				p95: 0,
-				p99: 0,
-			}
-		}
-
-		for i, p := range resp.GetPoints() { // Point per min
-			log.Println(p.Value.String())
-			log.Printf("Point:%d\tstart:%s\tend:%s\tvalue:%d\n", i, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
-			val := p.GetValue().GetInt64Value()
-			requestCount += val
-		}
-		loopCnt++
-	}
-	log.Printf("Request count: %d, %s\n", requestCount, latencies.String())
-	return &latencies, nil
 }
 
 func (mc *Client) Close() error {

@@ -10,37 +10,15 @@ import (
 
 // Visualize draw a line chart and export to a file.
 // Currently only supports hourly data for recent 24 hours.
-func Visualize(imgFile string, seriesMap *monitoring.TimeSeriesMap) (int64, error) {
-	xaxis := []time.Time{}
-	yaxis := []float64{}
+func Visualize(imgFile string, startTime, endTime time.Time, seriesMap *monitoring.TimeSeriesMap) (int64, error) {
+
 	series := []chart.Series{}
-	// now := time.Now()
 	i := 0
 	for name, ts := range *seriesMap {
-		for _, p := range ts {
-			xaxis = append(xaxis, p.Time)
-			yaxis = append(yaxis, p.Val)
-		}
-		series = append(series, chart.TimeSeries{
-			Name: name,
-			Style: chart.Style{
-				StrokeColor: chart.GetDefaultColor(i).WithAlpha(64),
-			},
-			XValues: xaxis,
-			YValues: yaxis,
-		})
+		series = append(series, makeChartTimeSeries(name, startTime, endTime, time.Hour, &ts))
 		i++
 	}
-	// ticks := []chart.Tick{}
-	// for i := 23; i >= 0; i-- {
-	// 	t := now.Add(-time.Duration(i) * time.Hour)
-	// 	ticks = append(ticks, chart.Tick{Value: float64(t.Hour()), Label: fmt.Sprintf("%d:00", t.Hour())})
-	// }
 	graph := chart.Chart{
-		// XAxis: chart.XAxis{
-		// 	Name:  "Time",
-		// 	Ticks: ticks,
-		// },
 		Series: series,
 	}
 
@@ -58,6 +36,21 @@ func Visualize(imgFile string, seriesMap *monitoring.TimeSeriesMap) (int64, erro
 		return 0, err
 	}
 	return stat.Size(), nil
+}
+
+func makeChartTimeSeries(name string, startTime, endTime time.Time, interval time.Duration, timeSeries *monitoring.TimeSeries) *chart.TimeSeries {
+	cTs := chart.TimeSeries{
+		Name: name,
+	}
+	counter := map[time.Time]float64{}
+	for _, p := range *timeSeries {
+		counter[p.Time] += p.Val
+	}
+	for t := startTime; t.Before(endTime); t = t.Add(interval) {
+		cTs.XValues = append(cTs.XValues, t)
+		cTs.YValues = append(cTs.YValues, counter[t])
+	}
+	return &cTs
 }
 
 func VisualizeSample(imgFile string) error {
