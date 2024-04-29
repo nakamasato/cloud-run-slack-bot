@@ -191,8 +191,12 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName string) error {
 	duration := 24 * time.Hour
-	aggergationPeriod := 1 * time.Hour
-	seriesMap, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggergationPeriod, duration)
+	aggregationPeriod := 5 * time.Minute
+	now := time.Now().UTC()
+	endTime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
+
+	startTime := endTime.Add(-1 * duration).UTC()
+	seriesMap, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggregationPeriod, startTime, endTime)
 
 	if err != nil {
 		_, _, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
@@ -232,7 +236,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	log.Printf("imgName: %s\n", imgName)
 
-	fileSize, err := visualize.Visualize(imgName, seriesMap)
+	fileSize, err := visualize.Visualize("Request Count", imgName, startTime, endTime, aggregationPeriod, seriesMap)
 	if err != nil {
 		log.Println(err)
 		return nil
