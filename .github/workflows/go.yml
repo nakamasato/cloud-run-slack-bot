@@ -39,7 +39,7 @@ jobs:
         with:
           version: v1.57
 
-  build-ko:
+  build:
     needs:
       - test
       - golangci-lint
