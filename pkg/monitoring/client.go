@@ -41,7 +41,7 @@ type TimeSeries []Point
 func (ts TimeSeries) String() string {
 	var s []string
 	for _, v := range ts {
-		s = append(s, fmt.Sprintf("t:%s:c:%v", v.Time.Format(time.TimeOnly), v.Val))
+		s = append(s, fmt.Sprintf("%v", v.Val))
 	}
 	return strings.Join(s, ",")
 }
