@@ -3,7 +3,7 @@ module github.com/nakamasato/cloud-run-slack-bot
 go 1.21.4
 
 require (
-	cloud.google.com/go/monitoring v1.18.1
+	cloud.google.com/go/monitoring v1.18.2
 	github.com/slack-go/slack v0.12.5
 	github.com/wcharczuk/go-chart/v2 v2.1.1
 	google.golang.org/api v0.176.1
@@ -43,7 +43,7 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240311132316-a219d84964c2 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240415180920-8c6c420018be // indirect
 	google.golang.org/grpc v1.63.2 // indirect
 )
