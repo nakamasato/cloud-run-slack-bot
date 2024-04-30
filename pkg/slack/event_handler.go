@@ -209,34 +209,15 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		}
 		_, _, err = h.client.PostMessageContext(ctx, channelId,
 			slack.MsgOptionText(fmt.Sprintf("No requests found for last %s. Please check <%s|%s>\n", duration, svc.GetMetricsUrl(), "Cloud Run metrics (GCP Console)"), false),
-			// slack.MsgOptionBlocks(slack.SectionBlock{
-			// 	Type: slack.MBTSection,
-			// 	Text: &slack.TextBlockObject{
-			// 		Type: slack.MarkdownType,
-			// 		Text: fmt.Sprintf("No requests found for last %s.\n", duration),
-			// 	},
-			// 	Accessory: &slack.Accessory{
-			// 		ButtonElement: &slack.ButtonBlockElement{
-			// 			Text: &slack.TextBlockObject{
-			// 				Type: slack.PlainTextType,
-			// 				Text: "metrics",
-			// 			},
-			// 			URL: svc.GetMetricsUrl(),
-			// 		},
-			// 	},
-			// }),
 		)
 		return err
 	}
-	_, _, err = h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText(fmt.Sprintf("requests (last %s) for service:%s\nrequests:\n%s", duration, svcName, seriesMap), false))
-	if err != nil {
-		return err
-	}
+
 	log.Println("visualizing")
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	log.Printf("imgName: %s\n", imgName)
 
-	fileSize, err := visualize.Visualize("Request Count", imgName, startTime, endTime, aggregationPeriod, seriesMap)
+	size, err := visualize.Visualize("Request Count", imgName, startTime, endTime, aggregationPeriod, seriesMap)
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -245,15 +226,66 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	if err != nil {
 		return err
 	}
-	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
-		Reader:   file,
-		FileSize: int(fileSize),
-		Filename: imgName,
-		Channel:  channelId,
-	})
-	log.Println(fSummary)
-	return err
 
+	// UploadFileV2Context does the followings:
+	// 1. https://api.slack.com/methods/files.getUploadURLExternal
+	// 2. https://api.slack.com/methods/files.upload
+	// 3. https://api.slack.com/methods/files.completeUploadExternal
+	// but there are two problems:
+	// 1. The file is sent to channel, although channel id is optional parameter of completeUploadExternal.
+	// 2. The link to the file is not available from the response (FileSummary{Id, Title})
+	_, err = h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+		Reader:   file,
+		FileSize: int(size),
+		Filename: imgName,
+		Channel:  channelId, // TODO: remove this hard-coded value
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	// f, err := h.client.UploadFileContext(ctx, slack.FileUploadParameters{
+	// 	Reader:   file,
+	// 	Filename: imgName,
+	// 	Filetype: "png",
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+
+	fields := []slack.AttachmentField{
+		{
+			Title: "service",
+			Value: svcName,
+			Short: true,
+		},
+	}
+	for k, v := range *seriesMap {
+		var total int64
+		for _, p := range v {
+			total += int64(p.Val)
+		}
+		fields = append(fields, slack.AttachmentField{
+			Title: k,
+			Value: fmt.Sprint(total),
+			Short: true,
+		})
+	}
+
+	attachment := slack.Attachment{
+		Text:   "Metrics:",
+		Fields: fields,
+		Color:  "good", // good, warning, danger
+	}
+	_, _, err = h.client.PostMessageContext(
+		ctx, channelId,
+		slack.MsgOptionAttachments(attachment),
+	)
+	if err != nil {
+		return err
+	}
+	return err
 }
 
 func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcName string) error {
