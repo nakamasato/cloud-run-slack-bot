@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/monitoring v1.18.2
 	github.com/slack-go/slack v0.12.5
 	github.com/wcharczuk/go-chart/v2 v2.1.1
-	google.golang.org/api v0.176.1
+	google.golang.org/api v0.177.0
 	google.golang.org/protobuf v1.34.0
 )
 
@@ -44,6 +44,6 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240415180920-8c6c420018be // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240429193739-8cf5692501f6 // indirect
 	google.golang.org/grpc v1.63.2 // indirect
 )
