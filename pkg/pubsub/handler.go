@@ -7,7 +7,6 @@ import (
 	"net/http"
 )
 
-// https://cloud.google.com/run/docs/tutorials/pubsub#run_pubsub_server-go
 // PubSubMessage is the payload of a Pub/Sub event.
 // See the documentation for more details:
 // https://cloud.google.com/pubsub/docs/reference/rest/v1/PubsubMessage
@@ -19,8 +18,17 @@ type PubSubMessage struct {
 	Subscription string `json:"subscription"`
 }
 
-// HelloPubSub receives and processes a Pub/Sub push message.
-func HelloPubSub(w http.ResponseWriter, r *http.Request) {
+type CloudRunAuditLog struct {
+	ProtoPayload struct {
+		MethodName string `json:"methodName"`
+		Request    struct {
+			Name string `json:"name"`
+		} `json:"request"`
+	} `json:"protoPayload"`
+}
+
+// HandleCloudRunAuditLogs receives and processes a Pub/Sub push message.
+func HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
 	var m PubSubMessage
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -35,9 +43,15 @@ func HelloPubSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := string(m.Message.Data)
-	if name == "" {
-		name = "World"
+	var logEntry CloudRunAuditLog
+	if err := json.Unmarshal(m.Message.Data, &logEntry); err != nil {
+		log.Printf("json.Unmarshal: %v", err)
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
 	}
-	log.Printf("Hello %s!", name)
+
+	methodName := logEntry.ProtoPayload.MethodName
+	requestName := logEntry.ProtoPayload.Request.Name
+
+	log.Printf("Method Name: %s, Request Name: %s", methodName, requestName)
 }
