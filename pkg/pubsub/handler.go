@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	internalslack "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 )
 
@@ -31,11 +32,11 @@ type CloudRunAuditLog struct {
 
 type CloudRunAuditLogHandler struct {
 	// Slack Client
-	client  *slack.Client
+	client  internalslack.Client
 	channel string
 }
 
-func NewCloudRunAuditLogHandler(channel string, client *slack.Client) *CloudRunAuditLogHandler {
+func NewCloudRunAuditLogHandler(channel string, client internalslack.Client) *CloudRunAuditLogHandler {
 	return &CloudRunAuditLogHandler{
 		client:  client,
 		channel: channel,
@@ -54,14 +55,14 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	// byte slice unmarshalling handles base64 decoding.
 	if err := json.Unmarshal(body, &m); err != nil {
 		log.Printf("json.Unmarshal: %v", err)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		http.Error(w, "Failed to parse PubSub message", http.StatusBadRequest)
 		return
 	}
 
 	var logEntry CloudRunAuditLog
 	if err := json.Unmarshal(m.Message.Data, &logEntry); err != nil {
 		log.Printf("json.Unmarshal: %v", err)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		http.Error(w, "Failed to parse logEntry", http.StatusBadRequest)
 		return
 	}
 
