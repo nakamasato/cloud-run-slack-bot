@@ -6,27 +6,31 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/pubsub"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 )
 
 type CloudRunSlackBotHttp struct {
-	client  *slack.Client
-	handler *slackinternal.SlackEventHandler
+	client       *slack.Client
+	slackHandler *slackinternal.SlackEventHandler
+	auditHandler *pubsub.CloudRunAuditLogHandler
 }
 
-func NewCloudRunSlackBotHttp(sClient *slack.Client, handler *slackinternal.SlackEventHandler) (*CloudRunSlackBotHttp, error) {
+func NewCloudRunSlackBotHttp(channel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler) *CloudRunSlackBotHttp {
 	return &CloudRunSlackBotHttp{
-		client:  sClient,
-		handler: handler,
-	}, nil
+		client:       sClient,
+		slackHandler: handler,
+		auditHandler: pubsub.NewCloudRunAuditLogHandler(channel, sClient),
+	}
 }
 
 // SlackEventsHandler starts http server
 func (svc *CloudRunSlackBotHttp) Run() {
 	http.HandleFunc("/slack/events", svc.SlackEventsHandler())
 	http.HandleFunc("/slack/interaction", svc.SlackInteractionHandler())
+	http.HandleFunc("/cloudrun/events", svc.auditHandler.HandleCloudRunAuditLogs)
 	log.Println("[INFO] Server listening")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
@@ -65,7 +69,7 @@ func (svc *CloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFunc {
 				return
 			}
 		case slackevents.CallbackEvent:
-			err := svc.handler.HandleEvent(&eventsAPIEvent)
+			err := svc.slackHandler.HandleEvent(&eventsAPIEvent)
 			if err != nil {
 				log.Println(err)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -84,7 +88,7 @@ func (svc *CloudRunSlackBotHttp) SlackInteractionHandler() http.HandlerFunc {
 			return
 		}
 
-		err := svc.handler.HandleInteraction(&interaction)
+		err := svc.slackHandler.HandleInteraction(&interaction)
 		if err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)

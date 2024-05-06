@@ -2,13 +2,18 @@
 
 This is a simple Slack bot running on Cloud Run with which you can interact with Cloud Run services.
 
+![](docs/preview.gif)
+
+## Architecture
+
 ![](docs/diagram.drawio.svg)
 
 ## Features
 
-Interact with Cloud Run service on Slack.
-1. Get metrics of Cloud Run service.
-1. Describe Cloud Run service.
+1. Interact with Cloud Run service on Slack.
+    1. Get metrics of Cloud Run service.
+    1. Describe Cloud Run service.
+1. Receive notification for Cloud Run audit logs on Slack.
 
 ## Cloud Run
 
@@ -24,6 +29,7 @@ Interact with Cloud Run service on Slack.
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
 1. `SLACK_APP_TOKEN` (optional): Slack oauth token (required for `SLACK_APP_MODE=socket`)
 1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
+1. `SLACK_CHANNEL` (optional): Slack Channel ID to receive notification for Cloud Run audit logs
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
 
 ### Deploy
@@ -93,16 +99,7 @@ curl -H 'Content-Type: application/json' -X POST -d '{"type": "event_callback", 
 
 ![](docs/slack-channel-preview.png)
 
-## References
 
-1. Qiita
-    1. [Go で Slack Bot を作る (2020年3月版)](https://qiita.com/frozenbonito/items/cf75dadce12ef9a048e9)
-    1. [Go で Interactive な Slack Bot を作る (2020年5月版)](https://qiita.com/frozenbonito/items/1df9bb685e6173160991)
-    1. [GolangからSlackに画像を投稿する](https://qiita.com/RuyPKG/items/5ac07ddc04432ee7641b)
-    1. [GoでインタラクティブなSlack Botを作る2通りのサンプル（Events API + Interactive Component / Socket Mode）](https://qiita.com/daitai-daidai/items/71f97d9cdb0e2ddf9781)
-1. [Querying metrics from Google Cloud Monitoring in Golang](https://medium.com/google-cloud/querying-metrics-from-google-cloud-monitoring-in-golang-2631ee3d33c1)
-1. Go packages:
-    1. https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest
-    1. https://pkg.go.dev/github.com/slack-go/slack/socketmode#Client
-    1. https://pkg.go.dev/google.golang.org/api/run/v2
-    1. https://pkg.go.dev/github.com/wcharczuk/go-chart
+## More
+
+1. [Terraform](docs/terraform.md)
