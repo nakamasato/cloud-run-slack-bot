@@ -2,13 +2,18 @@
 
 This is a simple Slack bot running on Cloud Run with which you can interact with Cloud Run services.
 
+![](docs/preview.gif)
+
+## Architecture
+
 ![](docs/diagram.drawio.svg)
 
 ## Features
 
-Interact with Cloud Run service on Slack.
-1. Get metrics of Cloud Run service.
-1. Describe Cloud Run service.
+1. Interact with Cloud Run service on Slack.
+    1. Get metrics of Cloud Run service.
+    1. Describe Cloud Run service.
+1. Receive notification for Cloud Run audit logs on Slack.
 
 ## Cloud Run
 
@@ -24,6 +29,7 @@ Interact with Cloud Run service on Slack.
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
 1. `SLACK_APP_TOKEN` (optional): Slack oauth token (required for `SLACK_APP_MODE=socket`)
 1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
+1. `SLACK_CHANNEL` (optional): Slack Channel ID to receive notification for Cloud Run audit logs
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
 
 ### Deploy
@@ -93,3 +99,7 @@ curl -H 'Content-Type: application/json' -X POST -d '{"type": "event_callback", 
 
 ![](docs/slack-channel-preview.png)
 
+
+## More
+
+1. [Terraform](docs/terraform.md)
