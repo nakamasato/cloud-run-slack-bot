@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -91,6 +92,10 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 				Title: "Service",
 				Value: serviceName,
 				Short: true,
+			},
+			{
+				Title: "message.Data",
+				Value: fmt.Sprintf("```\n%s\n```", m.Message.Data),
 			},
 		},
 		Color: "good",
