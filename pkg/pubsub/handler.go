@@ -9,7 +9,6 @@ import (
 
 	internalslack "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // PubSubMessage is the payload of a Pub/Sub event.
@@ -34,7 +33,6 @@ type CloudRunAuditLog struct {
 			Name string `json:"name"`
 		} `json:"request"`
 	} `json:"protoPayload"`
-	Timestamp timestamppb.Timestamp `json:"timestamp"`
 }
 
 type CloudRunAuditLogHandler struct {
@@ -88,10 +86,6 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	attachment := slack.Attachment{
 		Text: "Cloud Run audit event",
 		Fields: []slack.AttachmentField{
-			{
-				Title: "Timestamp",
-				Value: fmt.Sprintf("<!date^%d^{date} {time}|%d>", logEntry.Timestamp.Seconds, logEntry.Timestamp.Seconds),
-			},
 			{
 				Title: "Method",
 				Value: methodName,
