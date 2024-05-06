@@ -9,6 +9,7 @@ import (
 
 	internalslack "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // PubSubMessage is the payload of a Pub/Sub event.
@@ -24,12 +25,16 @@ type PubSubMessage struct {
 
 // LogEntry https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry
 type CloudRunAuditLog struct {
+	Resource struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"resource"`
 	ProtoPayload struct {
 		MethodName string `json:"methodName"`
 		Request    struct {
 			Name string `json:"name"`
 		} `json:"request"`
 	} `json:"protoPayload"`
+	Timestamp timestamppb.Timestamp `json:"timestamp"`
 }
 
 type CloudRunAuditLogHandler struct {
@@ -71,7 +76,7 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	}
 
 	methodName := logEntry.ProtoPayload.MethodName
-	serviceName := logEntry.ProtoPayload.Request.Name
+	serviceName := logEntry.Resource.Labels["service_name"]
 
 	log.Printf("Method Name: %s, Request Name: %s", methodName, serviceName)
 
@@ -83,6 +88,10 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	attachment := slack.Attachment{
 		Text: "Cloud Run audit event",
 		Fields: []slack.AttachmentField{
+			{
+				Title: "Timestamp",
+				Value: fmt.Sprintf("<!date^%d^{date} {time}|%d>", logEntry.Timestamp.Seconds, logEntry.Timestamp.Seconds),
+			},
 			{
 				Title: "Method",
 				Value: methodName,
