@@ -59,6 +59,8 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		return
 	}
 
+	log.Printf("Cloud Run audit log message.Data: %s\n", string(m.Message.Data))
+
 	var logEntry CloudRunAuditLog
 	if err := json.Unmarshal(m.Message.Data, &logEntry); err != nil {
 		log.Printf("json.Unmarshal: %v", err)
