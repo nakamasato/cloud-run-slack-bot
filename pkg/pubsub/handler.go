@@ -21,6 +21,7 @@ type PubSubMessage struct {
 	Subscription string `json:"subscription"`
 }
 
+// LogEntry https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry
 type CloudRunAuditLog struct {
 	ProtoPayload struct {
 		MethodName string `json:"methodName"`
