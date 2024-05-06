@@ -15,13 +15,13 @@ type CloudRunSlackBotSocket struct {
 	handler *slackinternal.SlackEventHandler
 }
 
-func NewCloudRunSlackBotSocket(sClient *slack.Client, handler *slackinternal.SlackEventHandler) (*CloudRunSlackBotSocket, error) {
+func NewCloudRunSlackBotSocket(channel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler) *CloudRunSlackBotSocket {
 	// https://pkg.go.dev/github.com/slack-go/slack/socketmode#New
 	socketClient := socketmode.New(sClient)
 	return &CloudRunSlackBotSocket{
 		sClient: socketClient,
 		handler: handler,
-	}, nil
+	}
 }
 
 // runSocket start socket mode

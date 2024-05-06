@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/slack-go/slack"
 )
 
 // PubSubMessage is the payload of a Pub/Sub event.
@@ -27,8 +29,21 @@ type CloudRunAuditLog struct {
 	} `json:"protoPayload"`
 }
 
+type CloudRunAuditLogHandler struct {
+	// Slack Client
+	client  *slack.Client
+	channel string
+}
+
+func NewCloudRunAuditLogHandler(channel string, client *slack.Client) *CloudRunAuditLogHandler {
+	return &CloudRunAuditLogHandler{
+		client:  client,
+		channel: channel,
+	}
+}
+
 // HandleCloudRunAuditLogs receives and processes a Pub/Sub push message.
-func HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
+func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
 	var m PubSubMessage
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -51,7 +66,35 @@ func HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	methodName := logEntry.ProtoPayload.MethodName
-	requestName := logEntry.ProtoPayload.Request.Name
+	serviceName := logEntry.ProtoPayload.Request.Name
 
-	log.Printf("Method Name: %s, Request Name: %s", methodName, requestName)
+	log.Printf("Method Name: %s, Request Name: %s", methodName, serviceName)
+
+	if h.channel == "" {
+		log.Println("Slack channel not set")
+		return
+	}
+
+	attachment := slack.Attachment{
+		Text: "Cloud Run audit event",
+		Fields: []slack.AttachmentField{
+			{
+				Title: "Method",
+				Value: methodName,
+				Short: true,
+			},
+			{
+				Title: "Service",
+				Value: serviceName,
+				Short: true,
+			},
+		},
+		Color: "good",
+	}
+	_, _, err = h.client.PostMessage(h.channel, slack.MsgOptionAttachments(attachment))
+	if err != nil {
+		log.Printf("slack.PostMessage: %v", err)
+		http.Error(w, "Failed to post Slack message", http.StatusInternalServerError)
+		return
+	}
 }
