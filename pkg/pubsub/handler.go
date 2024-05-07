@@ -119,11 +119,6 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 				Value: latestCreatedRevision,
 				Short: true,
 			},
-			{
-				Title: "message.Data",
-				Value: fmt.Sprintf("```\n%s\n```", m.Message.Data),
-				Short: false,
-			},
 		},
 		Color: "good",
 	}
