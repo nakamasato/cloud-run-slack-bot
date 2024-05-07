@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	internalslack "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
@@ -53,6 +54,12 @@ type CloudRunAuditLog struct {
 					RevisionName   string `json:"revisionName"`
 				} `json:"traffic"`
 			} `json:"status"`
+			Metadata struct {
+				Generation  int `json:"generation"`
+				Annotations struct {
+					LastModifier string `json:"serving.knative.dev/lastModifier"`
+				} `json:"annotations"`
+			} `json:"metadata"`
 		} `json:"response"`
 	} `json:"protoPayload"`
 }
@@ -97,13 +104,15 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 
 	methodName := logEntry.ProtoPayload.MethodName
 	serviceName := logEntry.Resource.Labels["service_name"]
+	lastModifier := logEntry.ProtoPayload.Response.Metadata.Annotations.LastModifier
+	generation := logEntry.ProtoPayload.Response.Metadata.Generation
 	latestReadyRevision := logEntry.ProtoPayload.Response.Status.LatestReadyRevisionName
 	latestCreatedRevision := logEntry.ProtoPayload.Response.Status.LatestCreatedRevisionName
 
 	log.Printf("Method Name: %s, Request Name: %s", methodName, serviceName)
 
 	if h.channel == "" {
-		log.Println("Slack channel not set")
+		log.Println("Slack channel not set. Please set SLACK_CHANNEL environment variable if you want to post messages to Slack.")
 		return
 	}
 
@@ -116,15 +125,19 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	}
 
 	fields = append(fields, slack.AttachmentField{
-		Title: "Latest Revision Status",
-		Value: fmt.Sprintf("latestCreatedRevision: %s (%s)", latestCreatedRevision, boolEmoji[latestReadyRevision == latestCreatedRevision]),
+		Title: "Latest Created Revision",
+		Value: fmt.Sprintf("`%s` (%s)", latestCreatedRevision, boolEmoji[latestReadyRevision == latestCreatedRevision]),
 		Short: true,
 	})
 
+	revisions := []string{}
 	for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
+		revisions = append(revisions, fmt.Sprintf("- `%s` (%d%%) (latest: %s)", traffic.RevisionName, traffic.Percent, boolEmoji[traffic.LatestRevision]))
+	}
+	if len(revisions) > 0 {
 		fields = append(fields, slack.AttachmentField{
-			Title: "Traffic Revision",
-			Value: fmt.Sprintf("%s (%d%%) (latest: %s)\n", traffic.RevisionName, traffic.Percent, boolEmoji[traffic.LatestRevision]),
+			Title: "Traffic Revisions",
+			Value: strings.Join(revisions, "\n"),
 		})
 	}
 
@@ -134,7 +147,7 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		Color:  boolColor[latestReadyRevision == latestCreatedRevision],
 	}
 	_, _, err = h.client.PostMessage(h.channel,
-		slack.MsgOptionText(fmt.Sprintf("Cloud Run service '%s' has been updated.\n", serviceName), false),
+		slack.MsgOptionText(fmt.Sprintf("`%s` has modified Cloud Run service `%s`. (generation: %d)\n", lastModifier, serviceName, generation), false),
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
