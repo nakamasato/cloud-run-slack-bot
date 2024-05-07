@@ -147,6 +147,11 @@ Invite the Slack app to the target channel.
 
 ## (Optional) Set up Cloud Run audit log notification
 
+To apply the following resources, the following roles are required:
+1. `roles/logging.configWriter`
+1. `roles/pubsub.admin`
+1. `roles/iam.serviceAccountAdmin`
+
 Create the following resources:
 
 1. Pub/Sub topic: `cloud-run-audit-log`
