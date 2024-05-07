@@ -27,7 +27,7 @@ func getColor(severity string) string {
 
 var severityColor = map[string]string{
 	"NOTICE": "good",
-	"ERROR":  "warning",
+	"ERROR":  "danger",
 }
 
 // PubSubMessage is the payload of a Pub/Sub event.
