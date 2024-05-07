@@ -140,11 +140,13 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		})
 	}
 
-	fields = append(fields, slack.AttachmentField{
-		Title: "Latest Created Revision",
-		Value: fmt.Sprintf("`%s` (%s)", latestCreatedRevision, boolEmoji[latestReadyRevision == latestCreatedRevision]),
-		Short: true,
-	})
+	if latestCreatedRevision != "" {
+		fields = append(fields, slack.AttachmentField{
+			Title: "Latest Created Revision",
+			Value: fmt.Sprintf("`%s` (%s)", latestCreatedRevision, boolEmoji[latestReadyRevision == latestCreatedRevision]),
+			Short: true,
+		})
+	}
 
 	revisions := []string{}
 	for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
@@ -163,13 +165,28 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		})
 	}
 
+	fields = append(fields, slack.AttachmentField{
+		Title: "Severity",
+		Value: logEntry.Severity,
+		Short: true,
+	})
+
 	attachment := slack.Attachment{
 		Text:   serviceName,
 		Fields: fields,
 		Color:  getColor(logEntry.Severity),
 	}
+
+	text := []string{}
+	if lastModifier != "" {
+		text = append(text, fmt.Sprintf("`%s` has modified Cloud Run service `%s`.", lastModifier, serviceName))
+	}
+	if generation != 0 {
+		text = append(text, fmt.Sprintf("Generation: %d", generation))
+	}
+	text = append(text, logEntry.ProtoPayload.Status.Message)
 	_, _, err = h.client.PostMessage(h.channel,
-		slack.MsgOptionText(fmt.Sprintf("`%s` has modified Cloud Run service `%s`. (generation: %d)\n%s", lastModifier, serviceName, generation, logEntry.ProtoPayload.Status.Message), false),
+		slack.MsgOptionText(strings.Join(text, ""), false),
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
