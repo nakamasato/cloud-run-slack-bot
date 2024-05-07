@@ -27,6 +27,7 @@ func getColor(severity string) string {
 
 var severityColor = map[string]string{
 	"NOTICE": "good",
+	"INFO": "good",
 	"ERROR":  "danger",
 }
 
