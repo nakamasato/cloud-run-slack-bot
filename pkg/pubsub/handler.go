@@ -27,7 +27,7 @@ func getColor(severity string) string {
 
 var severityColor = map[string]string{
 	"NOTICE": "good",
-	"INFO": "good",
+	"INFO":   "good",
 	"ERROR":  "danger",
 }
 
@@ -132,14 +132,17 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		return
 	}
 
-	fields := []slack.AttachmentField{
-		{
-			Title: "ResourceName",
-			Value: logEntry.ProtoPayload.ResourceName,
-			Short: false,
-		},
-	}
+	fields := []slack.AttachmentField{}
+	if resourceName := logEntry.ProtoPayload.ResourceName; resourceName != "" {
+		parts := strings.Split(resourceName, "/")
+		shortName := parts[len(parts)-1]
 
+		fields = append(fields, slack.AttachmentField{
+			Title: "ResourceName",
+			Value: shortName,
+			Short: true,
+		})
+	}
 	if methodName != "" {
 		fields = append(fields, slack.AttachmentField{
 			Title: "Method",
