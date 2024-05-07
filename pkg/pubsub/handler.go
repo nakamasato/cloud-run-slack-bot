@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -9,6 +10,17 @@ import (
 	internalslack "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 )
+
+var boolEmoji = map[bool]string{
+	true:  "✅",
+	false: "👀",
+}
+
+// Color can be good, warning, danger, or any hex color code (eg. #439FE0).
+var boolColor = map[bool]string{
+	true:  "good",
+	false: "warning",
+}
 
 // PubSubMessage is the payload of a Pub/Sub event.
 // See the documentation for more details:
@@ -95,33 +107,36 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		return
 	}
 
-	attachment := slack.Attachment{
-		Text: "Cloud Run audit event",
-		Fields: []slack.AttachmentField{
-			{
-				Title: "Method",
-				Value: methodName,
-				Short: true,
-			},
-			{
-				Title: "Service",
-				Value: serviceName,
-				Short: true,
-			},
-			{
-				Title: "Latest Ready Revision",
-				Value: latestReadyRevision,
-				Short: true,
-			},
-			{
-				Title: "Latest Created Revision",
-				Value: latestCreatedRevision,
-				Short: true,
-			},
+	fields := []slack.AttachmentField{
+		{
+			Title: "Method",
+			Value: methodName,
+			Short: true,
 		},
-		Color: "good",
 	}
-	_, _, err = h.client.PostMessage(h.channel, slack.MsgOptionAttachments(attachment))
+
+	fields = append(fields, slack.AttachmentField{
+		Title: "Latest Revision Status",
+		Value: fmt.Sprintf("latestCreatedRevision: %s (%s)", latestCreatedRevision, boolEmoji[latestReadyRevision == latestCreatedRevision]),
+		Short: true,
+	})
+
+	for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
+		fields = append(fields, slack.AttachmentField{
+			Title: "Traffic Revision",
+			Value: fmt.Sprintf("%s (%d%%) (latest: %s)\n", traffic.RevisionName, traffic.Percent, boolEmoji[traffic.LatestRevision]),
+		})
+	}
+
+	attachment := slack.Attachment{
+		Text:   serviceName,
+		Fields: fields,
+		Color:  boolColor[latestReadyRevision == latestCreatedRevision],
+	}
+	_, _, err = h.client.PostMessage(h.channel,
+		slack.MsgOptionText(fmt.Sprintf("Cloud Run service '%s' has been updated.\n", serviceName), false),
+		slack.MsgOptionAttachments(attachment),
+	)
 	if err != nil {
 		log.Printf("slack.PostMessage: %v", err)
 		http.Error(w, "Failed to post Slack message", http.StatusInternalServerError)
