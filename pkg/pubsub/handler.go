@@ -32,6 +32,17 @@ type CloudRunAuditLog struct {
 		Request    struct {
 			Name string `json:"name"`
 		} `json:"request"`
+		Response struct {
+			Status struct {
+				LatestCreatedRevisionName string `json:"latestCreatedRevisionName"`
+				LatestReadyRevisionName   string `json:"latestReadyRevisionName"`
+				Traffic                   []struct {
+					LatestRevision bool   `json:"latestRevision"`
+					Percent        int    `json:"percent"`
+					RevisionName   string `json:"revisionName"`
+				} `json:"traffic"`
+			} `json:"status"`
+		} `json:"response"`
 	} `json:"protoPayload"`
 }
 
@@ -75,6 +86,8 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 
 	methodName := logEntry.ProtoPayload.MethodName
 	serviceName := logEntry.Resource.Labels["service_name"]
+	latestReadyRevision := logEntry.ProtoPayload.Response.Status.LatestReadyRevisionName
+	latestCreatedRevision := logEntry.ProtoPayload.Response.Status.LatestCreatedRevisionName
 
 	log.Printf("Method Name: %s, Request Name: %s", methodName, serviceName)
 
@@ -94,6 +107,16 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 			{
 				Title: "Service",
 				Value: serviceName,
+				Short: true,
+			},
+			{
+				Title: "Latest Ready Revision",
+				Value: latestReadyRevision,
+				Short: true,
+			},
+			{
+				Title: "Latest Created Revision",
+				Value: latestCreatedRevision,
 				Short: true,
 			},
 			{
