@@ -181,12 +181,12 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	if lastModifier != "" {
 		text = append(text, fmt.Sprintf("`%s` has modified Cloud Run service `%s`.", lastModifier, serviceName))
 	}
-	if generation != 0 {
-		text = append(text, fmt.Sprintf("Generation: %d", generation))
+	if generation > 1 {
+		text = append(text, fmt.Sprintf("(generation: %d)\n", generation))
 	}
 	text = append(text, logEntry.ProtoPayload.Status.Message)
 	_, _, err = h.client.PostMessage(h.channel,
-		slack.MsgOptionText(strings.Join(text, ""), false),
+		slack.MsgOptionText(strings.Join(text, " "), false),
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
