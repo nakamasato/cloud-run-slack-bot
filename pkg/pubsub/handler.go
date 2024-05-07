@@ -54,8 +54,9 @@ type CloudRunAuditLog struct {
 			Code    int    `json:"code"`
 			Message string `json:"message"`
 		} `json:"status"`
-		MethodName string `json:"methodName"`
-		Request    struct {
+		ResourceName string `json:"resourceName"`
+		MethodName   string `json:"methodName"`
+		Request      struct {
 			Name string `json:"name"`
 		} `json:"request"`
 		Response struct {
@@ -130,7 +131,13 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		return
 	}
 
-	fields := []slack.AttachmentField{}
+	fields := []slack.AttachmentField{
+		{
+			Title: "ResourceName",
+			Value: logEntry.ProtoPayload.ResourceName,
+			Short: false,
+		},
+	}
 
 	if methodName != "" {
 		fields = append(fields, slack.AttachmentField{
@@ -177,16 +184,15 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		Color:  getColor(logEntry.Severity),
 	}
 
-	text := []string{}
-	if lastModifier != "" {
-		text = append(text, fmt.Sprintf("`%s` has modified Cloud Run service `%s`.", lastModifier, serviceName))
+	text := ""
+	if logEntry.ProtoPayload.Status.Message != "" {
+		text = logEntry.ProtoPayload.Status.Message
+	} else {
+		text = fmt.Sprintf("`%s` has modified Cloud Run service `%s` (generation :%d).", lastModifier, serviceName, generation)
 	}
-	if generation > 1 {
-		text = append(text, fmt.Sprintf("(generation: %d)\n", generation))
-	}
-	text = append(text, logEntry.ProtoPayload.Status.Message)
+
 	_, _, err = h.client.PostMessage(h.channel,
-		slack.MsgOptionText(strings.Join(text, " "), false),
+		slack.MsgOptionText(text, false),
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
