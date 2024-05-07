@@ -45,8 +45,10 @@ type PubSubMessage struct {
 type CloudRunAuditLog struct {
 	Resource struct {
 		Labels map[string]string `json:"labels"`
+		Type   string            `json:"type"`
 	} `json:"resource"`
 	Severity     string `json:"severity"`
+	LogName      string `json:"logName"`
 	ProtoPayload struct {
 		Status struct {
 			Code    int    `json:"code"`
@@ -165,7 +167,7 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		Color:  getColor(logEntry.Severity),
 	}
 	_, _, err = h.client.PostMessage(h.channel,
-		slack.MsgOptionText(fmt.Sprintf("`%s` has modified Cloud Run service `%s`. (generation: %d)\n", lastModifier, serviceName, generation), false),
+		slack.MsgOptionText(fmt.Sprintf("`%s` has modified Cloud Run service `%s`. (generation: %d)\n%s", lastModifier, serviceName, generation, logEntry.ProtoPayload.Status.Message), false),
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {

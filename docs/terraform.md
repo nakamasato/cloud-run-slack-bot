@@ -172,7 +172,7 @@ resource "google_pubsub_topic_iam_member" "log_writer" {
 resource "google_logging_project_sink" "cloud_run_audit_log" {
   name                   = "cloud_run_audit_log"
   destination            = "pubsub.googleapis.com/projects/${google_pubsub_topic.cloud_run_audit_log.project}/topics/${google_pubsub_topic.cloud_run_audit_log.name}"
-  filter                 = "resource.type = cloud_run_revision AND logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Factivity"
+  filter                 = "resource.type = cloud_run_revision AND (logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Factivity OR projects/${var.project}/logs/cloudaudit.googleapis.com%2Fsystem_event)"
   unique_writer_identity = true
 }
 
