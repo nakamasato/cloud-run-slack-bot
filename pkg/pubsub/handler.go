@@ -130,12 +130,14 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		return
 	}
 
-	fields := []slack.AttachmentField{
-		{
+	fields := []slack.AttachmentField{}
+
+	if methodName != "" {
+		fields = append(fields, slack.AttachmentField{
 			Title: "Method",
 			Value: methodName,
 			Short: true,
-		},
+		})
 	}
 
 	fields = append(fields, slack.AttachmentField{
