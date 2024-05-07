@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/monitoring v1.19.0
 	github.com/slack-go/slack v0.12.5
 	github.com/wcharczuk/go-chart/v2 v2.1.1
-	google.golang.org/api v0.177.0
+	google.golang.org/api v0.178.0
 	google.golang.org/protobuf v1.34.1
 )
 
@@ -26,7 +26,7 @@ require (
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
+	github.com/googleapis/gax-go/v2 v2.12.4 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
@@ -37,7 +37,7 @@ require (
 	golang.org/x/crypto v0.22.0 // indirect
 	golang.org/x/image v0.14.0 // indirect
 	golang.org/x/net v0.24.0 // indirect
-	golang.org/x/oauth2 v0.19.0 // indirect
+	golang.org/x/oauth2 v0.20.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
