@@ -76,7 +76,7 @@ func makeChartTimeSeries(i int, name string, startTime, endTime time.Time, inter
 		cTs.XValues = append(cTs.XValues, t)
 		cTs.YValues = append(cTs.YValues, counter[t])
 	}
-	log.Printf("name: %s\nXValues(%d): %v\nYValues(%d): %v", name, len(cTs.XValues), cTs.XValues, len(cTs.YValues), cTs.YValues)
+	log.Printf("name: %s\nXValues:%d, YValues:%d", name, len(cTs.XValues), len(cTs.YValues))
 	return &cTs
 }
 
