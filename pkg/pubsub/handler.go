@@ -18,9 +18,16 @@ var boolEmoji = map[bool]string{
 }
 
 // Color can be good, warning, danger, or any hex color code (eg. #439FE0).
-var boolColor = map[bool]string{
-	true:  "good",
-	false: "warning",
+func getColor(severity string) string {
+	if color, ok := severityColor[severity]; ok {
+		return color
+	}
+	return "#D3D3D3" // light gray
+}
+
+var severityColor = map[string]string{
+	"NOTICE": "good",
+	"ERROR":  "warning",
 }
 
 // PubSubMessage is the payload of a Pub/Sub event.
@@ -39,7 +46,12 @@ type CloudRunAuditLog struct {
 	Resource struct {
 		Labels map[string]string `json:"labels"`
 	} `json:"resource"`
+	Severity     string `json:"severity"`
 	ProtoPayload struct {
+		Status struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"status"`
 		MethodName string `json:"methodName"`
 		Request    struct {
 			Name string `json:"name"`
@@ -140,11 +152,17 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 			Value: strings.Join(revisions, "\n"),
 		})
 	}
+	if logEntry.Severity == "ERROR" {
+		fields = append(fields, slack.AttachmentField{
+			Title: "Error",
+			Value: fmt.Sprintf("Code: %d\nMessage: %s", logEntry.ProtoPayload.Status.Code, logEntry.ProtoPayload.Status.Message),
+		})
+	}
 
 	attachment := slack.Attachment{
 		Text:   serviceName,
 		Fields: fields,
-		Color:  boolColor[latestReadyRevision == latestCreatedRevision],
+		Color:  getColor(logEntry.Severity),
 	}
 	_, _, err = h.client.PostMessage(h.channel,
 		slack.MsgOptionText(fmt.Sprintf("`%s` has modified Cloud Run service `%s`. (generation: %d)\n", lastModifier, serviceName, generation), false),
