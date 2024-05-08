@@ -84,4 +84,4 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build
-        run: ko build . --tags="${{ steps.set_config.outputs.TAGS }}" --bare
+        run: ko build . --tags="${{ steps.set_config.outputs.TAGS }},latest" --bare
