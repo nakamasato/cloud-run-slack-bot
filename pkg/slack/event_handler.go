@@ -26,6 +26,12 @@ const (
 	defaultAggregationPeriod = 5 * time.Minute
 )
 
+var durationAggregationPeriodMap = map[string]time.Duration{
+	"1h":   1 * time.Minute,          // 60 points
+	"24h":  defaultAggregationPeriod, // 288 points
+	"168h": 1 * time.Hour,            // 168 points
+}
+
 type Memory struct {
 	mu sync.Mutex
 	// memory for storing target cloud run service (slack user id -> service id)
@@ -133,7 +139,11 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			if err != nil {
 				return err
 			}
-			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, duration, defaultAggregationPeriod)
+			aggregationPeriod, ok := durationAggregationPeriodMap[value]
+			if !ok {
+				aggregationPeriod = defaultAggregationPeriod
+			}
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, duration, aggregationPeriod)
 		}
 
 	}
