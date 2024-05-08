@@ -2,7 +2,7 @@
 
 This is a simple Slack bot running on Cloud Run with which you can interact with Cloud Run services.
 
-![](docs/preview.gif)
+<img src="docs/preview.gif" alt="preview" width="400"/>
 
 ## Architecture
 
@@ -82,22 +82,11 @@ gcloud run deploy cloud-run-slack-bot \
 1. Interactivity & Shortcuts
     - Request URL: `https://your-cloud-run-url/slack/interactivity`
 
-## Local Run
-
-```
-go run main.go
-```
-
-TODO:
-```
-curl -H 'Content-Type: application/json' -X POST -d '{"type": "event_callback", "event": {"type": "app_mention", "user": "xx", "reaction": "memo", "item_user": "xx", "item": {"type": "message", "channel": "CHANNEL", "ts": "1701919197.246629"}, "event_ts": "1704502151.000000"}}' localhost:8080/slack/events
-```
-
 ## Slack Channel Settings
 
 1. Remove preview for console.cloud.google.com
 
-![](docs/slack-channel-preview.png)
+<img src="docs/slack-channel-preview.png" alt="preview" width="400"/>
 
 
 ## More
