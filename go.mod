@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/monitoring v1.19.0
 	github.com/slack-go/slack v0.13.0
 	github.com/wcharczuk/go-chart/v2 v2.1.1
-	google.golang.org/api v0.180.0
+	google.golang.org/api v0.181.0
 	google.golang.org/protobuf v1.34.1
 )
 
