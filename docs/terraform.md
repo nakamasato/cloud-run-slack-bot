@@ -203,10 +203,10 @@ resource "google_project_service_identity" "pubsub_agent" {
   service  = "pubsub.googleapis.com"
 }
 
-resource "google_project_iam_binding" "project_token_creator" {
+resource "google_project_iam_member" "project_token_creator" {
   project = var.project
   role    = "roles/iam.serviceAccountTokenCreator"
-  members = ["serviceAccount:${google_project_service_identity.pubsub_agent.email}"]
+  member  = "serviceAccount:${google_project_service_identity.pubsub_agent.email}"
 }
 
 resource "google_pubsub_subscription" "subscription" {
