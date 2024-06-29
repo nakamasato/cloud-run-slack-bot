@@ -116,12 +116,12 @@ resource "google_cloud_run_v2_service" "cloud-run-slack-bot" {
   }
 }
 
-resource "google_cloud_run_service_iam_binding" "cloud_run_slack_bot" {
+resource "google_cloud_run_v2_service_iam_binding" "cloud_run_slack_bot" {
+  name     = google_cloud_run_v2_service.cloud_run_slack_bot.name
   location = google_cloud_run_v2_service.cloud_run_slack_bot.location
-  service  = google_cloud_run_v2_service.cloud_run_slack_bot.name
   role     = "roles/run.invoker"
   members = [
-    "allUsers"
+    "allUsers",
   ]
 }
 ```
@@ -188,9 +188,9 @@ resource "google_service_account" "sa" {
   display_name = "Cloud Run Pub/Sub Invoker"
 }
 
-resource "google_cloud_run_service_iam_binding" "cloud_run_slack_bot" {
+resource "google_cloud_run_v2_service_iam_binding" "cloud_run_slack_bot" {
+  name     = google_cloud_run_v2_service.cloud_run_slack_bot.name
   location = google_cloud_run_v2_service.cloud_run_slack_bot.location
-  service  = google_cloud_run_v2_service.cloud_run_slack_bot.name
   role     = "roles/run.invoker"
   members = [
     "allUsers",
