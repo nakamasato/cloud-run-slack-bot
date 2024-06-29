@@ -80,7 +80,7 @@ gcloud run deploy cloud-run-slack-bot \
     - Request URL: `https://your-cloud-run-url/slack/events`
     - Subscribe to bot events: `app_mention`
 1. Interactivity & Shortcuts
-    - Request URL: `https://your-cloud-run-url/slack/interactivity`
+    - Request URL: `https://your-cloud-run-url/slack/interaction`
 
 ## Slack Channel Settings
 
