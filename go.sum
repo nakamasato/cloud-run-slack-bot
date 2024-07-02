@@ -25,6 +25,8 @@ cloud.google.com/go/monitoring v1.19.0 h1:NCXf8hfQi+Kmr56QJezXRZ6GPb80ZI7El1Xzty
 cloud.google.com/go/monitoring v1.19.0/go.mod h1:25IeMR5cQ5BoZ8j1eogHE5VPJLlReQ7zFp5OiLgiGZw=
 cloud.google.com/go/monitoring v1.20.0 h1:GsIGYe6Q42EHONJtrUenZFpPIF60qLpeMhxVHIBcaPA=
 cloud.google.com/go/monitoring v1.20.0/go.mod h1:5oUy5KllE4yxpztDJuzq/VVck0Q0cn/ykC98C9MXux0=
+cloud.google.com/go/monitoring v1.20.1 h1:XmM6uk4+mI2ZhWdI2n/2GNhJdpeQN+1VdG2UWEDhX48=
+cloud.google.com/go/monitoring v1.20.1/go.mod h1:FYSe/brgfuaXiEzOQFhTjsEsJv+WePyK71X7Y8qo6uQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/blend/go-sdk v1.20220411.3 h1:GFV4/FQX5UzXLPwWV03gP811pj7B8J2sbuq+GJQofXc=
 github.com/blend/go-sdk v1.20220411.3/go.mod h1:7lnH8fTi6U4i1fArEXRyOIY2E1X4MALg09qsQqY1+ak=
