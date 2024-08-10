@@ -265,7 +265,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		Reader:   file,
 		FileSize: int(size),
 		Filename: imgName,
-		Channel:  channelId,
+		// Channel:  channelId,
 	})
 	log.Println(fSummary)
 	if err != nil {
@@ -284,7 +284,6 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 			Type:     slack.MBTImage,
 			ImageURL: f.URLPrivate,
 			AltText:  "Request Count",
-			// Title:    slack.NewTextBlockObject("title", "title", false, false),
 		},
 	}
 	fields := []slack.AttachmentField{}
@@ -335,7 +334,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		slack.MsgOptionBlocks(blocks...),
 	)
 	if err != nil {
-		log.Println(err)
+		log.Println(fmt.Sprintf("err post message: %s\n", err))
 		return err
 	}
 	return err
