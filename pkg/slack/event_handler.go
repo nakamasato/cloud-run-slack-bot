@@ -21,7 +21,7 @@ const (
 	ActionIdDescribeService  = "select-service-for-describe"
 	ActionIdMetricsService   = "select-service-for-metrics"
 	ActionIdCurrentService   = "select-current-service"
-	ActionIdMetricsDuration  = "metrics-duration"
+	ActionIdMetrics          = "metrics"
 	defaultDuration          = 24 * time.Hour
 	defaultAggregationPeriod = 5 * time.Minute
 )
@@ -96,7 +96,7 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 			if !ok {
 				return h.list(ctx, e.Channel, ActionIdMetricsService)
 			}
-			return h.getServiceMetrics(ctx, e.Channel, currentService, "latency", defaultDuration, defaultAggregationPeriod)
+			return h.getServiceMetrics(ctx, e.Channel, currentService, "count", defaultDuration, defaultAggregationPeriod)
 		case "set", "s":
 			return h.list(ctx, e.Channel, ActionIdCurrentService)
 		case "help", "h":
@@ -122,28 +122,29 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			return h.describeService(ctx, interaction.Channel.ID, action.SelectedOption.Value)
 		case ActionIdMetricsService:
 			h.memory.Set(interaction.User.ID, action.SelectedOption.Value)
-			return h.getServiceMetrics(ctx, interaction.Channel.ID, action.SelectedOption.Value, "latency", defaultDuration, defaultAggregationPeriod)
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, action.SelectedOption.Value, "count", defaultDuration, defaultAggregationPeriod)
 		case ActionIdCurrentService:
 			return h.setCurrentService(ctx, interaction.Channel.ID, interaction.User.ID, action.SelectedOption.Value)
 		}
 	case slack.InteractionTypeInteractionMessage:
-		value := interaction.ActionCallback.AttachmentActions[0].SelectedOptions[0].Value
+		durationVal := interaction.ActionCallback.AttachmentActions[0].SelectedOptions[0].Value
+		metricsTypeVal := interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
 		callbackId := interaction.CallbackID
 		switch callbackId {
-		case ActionIdMetricsDuration:
+		case ActionIdMetrics:
 			svc, ok := h.memory.Get(interaction.User.ID)
 			if !ok {
 				return h.list(ctx, interaction.Channel.ID, ActionIdMetricsService)
 			}
-			duration, err := time.ParseDuration(value)
+			duration, err := time.ParseDuration(durationVal)
 			if err != nil {
 				return err
 			}
-			aggregationPeriod, ok := durationAggregationPeriodMap[value]
+			aggregationPeriod, ok := durationAggregationPeriodMap[durationVal]
 			if !ok {
 				aggregationPeriod = defaultAggregationPeriod
 			}
-			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, "latency", duration, aggregationPeriod)
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, metricsTypeVal, duration, aggregationPeriod)
 		}
 
 	}
@@ -307,7 +308,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		Text:       title,
 		Fields:     fields,
 		Color:      "good", // good, warning, danger
-		CallbackID: ActionIdMetricsDuration,
+		CallbackID: ActionIdMetrics,
 		Actions: []slack.AttachmentAction{
 			{
 				Name: "duration",
