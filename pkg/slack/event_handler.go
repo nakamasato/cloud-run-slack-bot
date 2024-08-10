@@ -127,11 +127,11 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			return h.setCurrentService(ctx, interaction.Channel.ID, interaction.User.ID, action.SelectedOption.Value)
 		}
 	case slack.InteractionTypeInteractionMessage:
-		durationVal := interaction.ActionCallback.AttachmentActions[0].SelectedOptions[0].Value
-		metricsTypeVal := interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
 		callbackId := interaction.CallbackID
 		switch callbackId {
 		case ActionIdMetrics:
+			durationVal := interaction.ActionCallback.AttachmentActions[0].SelectedOptions[0].Value
+			metricsTypeVal := interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
 			svc, ok := h.memory.Get(interaction.User.ID)
 			if !ok {
 				return h.list(ctx, interaction.Channel.ID, ActionIdMetricsService)

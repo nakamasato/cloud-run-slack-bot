@@ -144,7 +144,7 @@ func (mc *Client) GetRequestCountByLabel(ctx context.Context, label, labelType s
 			labelValue, ok = resp.Resource.Labels[label]
 		default:
 			log.Printf("Invalid label type %s\n", labelType)
-			return nil, fmt.Errorf("Invalid label type %s", labelType)
+			return nil, fmt.Errorf("invalid label type %s", labelType)
 		}
 		if seriesMap[labelValue] == nil {
 			seriesMap[labelValue] = TimeSeries{}
