@@ -277,7 +277,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	if err != nil {
 		return err
 	}
-	log.Println(f)
+	log.Println(f.URLPrivate)
 	blocks := []slack.Block{
 		// slack.NewImageBlock(f.URLPrivate, "Request Count", "Request Count", slack.NewTextBlockObject("title", "title", false, false)),
 		slack.ImageBlock{
@@ -334,7 +334,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		slack.MsgOptionBlocks(blocks...),
 	)
 	if err != nil {
-		log.Println(fmt.Sprintf("err post message: %s\n", err))
+		log.Printf("err post message: %s\n", err)
 		return err
 	}
 	return err
