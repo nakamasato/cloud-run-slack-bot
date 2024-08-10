@@ -304,7 +304,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	}
 
 	attachment := slack.Attachment{
-		Text:       "Request Count",
+		Text:       title,
 		Fields:     fields,
 		Color:      "good", // good, warning, danger
 		CallbackID: ActionIdMetricsDuration,
@@ -325,6 +325,21 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 					{
 						Text:  "1w",
 						Value: "168h",
+					},
+				},
+			},
+			{
+				Name: "metrics",
+				Text: "Metrics",
+				Type: "select",
+				Options: []slack.AttachmentActionOption{
+					{
+						Text:  "latency",
+						Value: "latency",
+					},
+					{
+						Text:  "count",
+						Value: "count",
 					},
 				},
 			},
