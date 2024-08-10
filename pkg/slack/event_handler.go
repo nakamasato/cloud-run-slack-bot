@@ -287,51 +287,51 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 			Title:    slack.NewTextBlockObject("title", "title", false, false),
 		},
 	}
-	fields := []slack.AttachmentField{}
-	for k, v := range *seriesMap {
-		var total int64
-		for _, p := range v {
-			total += int64(p.Val)
-		}
-		fields = append(fields, slack.AttachmentField{
-			Title: k,
-			Value: fmt.Sprint(total),
-			Short: true,
-		})
-	}
+	// fields := []slack.AttachmentField{}
+	// for k, v := range *seriesMap {
+	// 	var total int64
+	// 	for _, p := range v {
+	// 		total += int64(p.Val)
+	// 	}
+	// 	fields = append(fields, slack.AttachmentField{
+	// 		Title: k,
+	// 		Value: fmt.Sprint(total),
+	// 		Short: true,
+	// 	})
+	// }
 
-	attachment := slack.Attachment{
-		Text:       "Request Count",
-		Fields:     fields,
-		Color:      "good", // good, warning, danger
-		CallbackID: ActionIdMetricsDuration,
-		ImageURL:   f.URLPrivate,
-		Actions: []slack.AttachmentAction{
-			{
-				Name: "duration",
-				Text: "Duration",
-				Type: "select",
-				Options: []slack.AttachmentActionOption{
-					{
-						Text:  "1h",
-						Value: "1h",
-					},
-					{
-						Text:  "1d",
-						Value: "24h",
-					},
-					{
-						Text:  "1w",
-						Value: "168h",
-					},
-				},
-			},
-		},
-	}
+	// attachment := slack.Attachment{
+	// 	Text:       "Request Count",
+	// 	Fields:     fields,
+	// 	Color:      "good", // good, warning, danger
+	// 	CallbackID: ActionIdMetricsDuration,
+	// 	ImageURL:   f.URLPrivate,
+	// 	Actions: []slack.AttachmentAction{
+	// 		{
+	// 			Name: "duration",
+	// 			Text: "Duration",
+	// 			Type: "select",
+	// 			Options: []slack.AttachmentActionOption{
+	// 				{
+	// 					Text:  "1h",
+	// 					Value: "1h",
+	// 				},
+	// 				{
+	// 					Text:  "1d",
+	// 					Value: "24h",
+	// 				},
+	// 				{
+	// 					Text:  "1w",
+	// 					Value: "168h",
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// }
 	_, _, err = h.client.PostMessageContext(
 		ctx, channelId,
 		slack.MsgOptionText(fmt.Sprintf("`%s`: %s", svcName, f.URLPrivate), false),
-		slack.MsgOptionAttachments(attachment),
+		// slack.MsgOptionAttachments(attachment),
 		slack.MsgOptionBlocks(blocks...),
 	)
 	if err != nil {
