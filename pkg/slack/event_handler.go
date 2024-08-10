@@ -265,7 +265,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		Reader:   file,
 		FileSize: int(size),
 		Filename: imgName,
-		// Channel:  channelId,
+		Channel:  channelId,
 	})
 	log.Println(fSummary)
 	if err != nil {
@@ -281,7 +281,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	blocks := []slack.Block{
 		// slack.NewImageBlock(f.URLPrivate, "Request Count", "Request Count", slack.NewTextBlockObject("title", "title", false, false)),
 		// slack.NewImageBlock(f.URLPrivate, "Resource Count", "resource_count", slack.NewTextBlockObject(slack, text string, emoji bool, verbatim bool))
-		slack.NewTextBlockObject("text", fmt.Sprintf("`%s`: %s", svcName, f.URLPrivate), false, false),
+		// slack.NewTextBlockObject("text", fmt.Sprintf("`%s`: %s", svcName, f.URLPrivate), false, false),
 		slack.ImageBlock{
 			Type:     "image",
 			ImageURL: "https://files.slack.com/files-pri/TK8MCGJHH-F07GD216W4S/cloud-run-slack-bot-metrics.png",
