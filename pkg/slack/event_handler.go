@@ -265,6 +265,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		Reader:   file,
 		FileSize: int(size),
 		Filename: imgName,
+		Channel:  channelId,
 	})
 	if err != nil {
 		log.Println(err)
