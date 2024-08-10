@@ -278,7 +278,9 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		return err
 	}
 	log.Println(f)
-
+	blocks := []slack.Block{
+		slack.NewImageBlock(f.URLPrivate, "Request Count", "Request Count", slack.NewTextBlockObject("title", "title", false, false)),
+	}
 	fields := []slack.AttachmentField{}
 	for k, v := range *seriesMap {
 		var total int64
@@ -324,6 +326,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		ctx, channelId,
 		slack.MsgOptionText(fmt.Sprintf("`%s`: %s", svcName, f.URLPrivate), false),
 		slack.MsgOptionAttachments(attachment),
+		slack.MsgOptionBlocks(blocks...),
 	)
 	if err != nil {
 		return err
