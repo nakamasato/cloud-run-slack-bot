@@ -102,7 +102,7 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 		case "help", "h":
 			return h.help(ctx, e.Channel, e.User)
 		case "sample":
-			return h.sample(ctx, e.Channel)
+			return h.sample(ctx)
 		default:
 			return h.help(ctx, e.Channel, e.User)
 		}
@@ -265,7 +265,6 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		Reader:   file,
 		FileSize: int(size),
 		Filename: imgName,
-		Channel:  channelId,
 	})
 	if err != nil {
 		log.Println(err)
@@ -377,7 +376,7 @@ func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcN
 	return err
 }
 
-func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error {
+func (h *SlackEventHandler) sample(ctx context.Context) error {
 	imgName := path.Join(h.tmpDir, "sample.png")
 	err := visualize.VisualizeSample(imgName)
 	if err != nil {
@@ -391,11 +390,12 @@ func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error 
 	if err != nil {
 		return err
 	}
+
+	// https://github.com/slack-go/slack/pull/1293 channel got optional
 	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
 		Reader:   file,
 		FileSize: int(stat.Size()), // random value
 		Filename: imgName,
-		Channel:  channelId,
 	})
 	log.Println(fSummary)
 	return err
