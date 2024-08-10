@@ -283,7 +283,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		slack.ImageBlock{
 			Type:     slack.MBTImage,
 			ImageURL: f.URLPrivate,
-			AltText:  "Request Count",
+			AltText:  "RequestCount",
 		},
 	}
 	fields := []slack.AttachmentField{}
