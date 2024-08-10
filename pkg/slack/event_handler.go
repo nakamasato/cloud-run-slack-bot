@@ -335,6 +335,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		slack.MsgOptionBlocks(blocks...),
 	)
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 	return err
