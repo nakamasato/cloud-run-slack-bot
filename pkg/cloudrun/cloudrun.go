@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/api/run/v1"
+	runv1 "google.golang.org/api/run/v1"
+	runv2 "google.golang.org/api/run/v2"
 )
 
 type Client struct {
 	project string
 	region  string
-	nsSvc   *run.NamespacesServicesService
+	nsSvc   *runv1.NamespacesServicesService
 }
 
 type CloudRunService struct {
@@ -56,11 +57,12 @@ func (c *Client) GetServiceNameFromFullname(fullname string) string {
 }
 
 func NewClient(ctx context.Context, project, region string) (*Client, error) {
-	runSvc, err := run.NewService(ctx)
+	runSvc, err := runv1.NewService(ctx)
+	runSvc.BasePath = fmt.Sprintf("https://%s-run.googleapis.com/", region)
 	if err != nil {
 		return nil, err
 	}
-	nsSvc := run.NewNamespacesServicesService(runSvc)
+	nsSvc := runv1.NewNamespacesServicesService(runSvc)
 	return &Client{
 		project: project,
 		region:  region,
@@ -75,7 +77,7 @@ func (c *Client) ListServices(ctx context.Context) ([]string, error) {
 	// * `namespaces/{project_id_or_number}/services`
 	// * `projects/{project_id_or_number}/locations/{region}`
 	// * `projects/{project_id_or_number}/regions/{region}`.
-	res, err := c.nsSvc.List(c.project).Context(ctx).Do()
+	res, err := c.nsSvc.List(fmt.Sprintf("namespaces/%s", c.project)).Context(ctx).Do()
 	if err != nil {
 		return nil, err
 	}
