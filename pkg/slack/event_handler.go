@@ -138,7 +138,7 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 				case "duration":
 					durationVal = action.SelectedOptions[0].Value
 				case "metrics":
-					metricsTypeVal = interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
+					metricsTypeVal = action.SelectedOptions[0].Value
 				}
 			}
 
