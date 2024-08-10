@@ -174,6 +174,7 @@ func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.List
 	var loopCnt int
 	cnt := Counter{}
 	seriesMap := TimeSeriesMap{}
+	labelValue := "p99"
 	for {
 		resp, err := it.Next()
 		if err == iterator.Done {
@@ -191,12 +192,8 @@ func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.List
 			continue
 		}
 		log.Printf("resp %v\n", resp.String())
-		var labelValue string
 		var ok bool
-		labelValue, ok = resp.Resource.Labels["revision_name"]
-		if seriesMap[labelValue] == nil {
-			seriesMap[labelValue] = TimeSeries{}
-		}
+
 		if !ok {
 			log.Printf("Metric label 'revision_name' not found")
 			continue
@@ -237,7 +234,6 @@ func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, servic
 		Aggregation: &monitoringpb.Aggregation{
 			AlignmentPeriod:  &durationpb.Duration{Seconds: int64(aggregationPeriod.Seconds())}, // The value must be at least 60 seconds.
 			PerSeriesAligner: monitoringpb.Aggregation_ALIGN_PERCENTILE_99,                      // p99
-			GroupByFields:    []string{"resource.revision_name"},
 		},
 		// PageSize: int32(10000), 100,000 if empty
 	}
