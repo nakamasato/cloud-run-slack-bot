@@ -102,7 +102,7 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 		case "help", "h":
 			return h.help(ctx, e.Channel, e.User)
 		case "sample":
-			return h.sample(ctx)
+			return h.sample(ctx, e.Channel)
 		default:
 			return h.help(ctx, e.Channel, e.User)
 		}
@@ -261,13 +261,18 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	// but there are two problems:
 	// 1. The file is sent to channel, although channel id is optional parameter of completeUploadExternal.
 	// 2. The link to the file is not available from the response (FileSummary{Id, Title})
-	_, err = h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
 		Reader:   file,
 		FileSize: int(size),
 		Filename: imgName,
 	})
 	if err != nil {
 		log.Println(err)
+		return err
+	}
+
+	f, _, _, err := h.client.GetFileInfoContext(ctx, fSummary.ID, 1, 1)
+	if err != nil {
 		return err
 	}
 
@@ -298,6 +303,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		Fields:     fields,
 		Color:      "good", // good, warning, danger
 		CallbackID: ActionIdMetricsDuration,
+		ImageURL:   f.URLPrivate,
 		Actions: []slack.AttachmentAction{
 			{
 				Name: "duration",
@@ -376,7 +382,7 @@ func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcN
 	return err
 }
 
-func (h *SlackEventHandler) sample(ctx context.Context) error {
+func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error {
 	imgName := path.Join(h.tmpDir, "sample.png")
 	err := visualize.VisualizeSample(imgName)
 	if err != nil {
@@ -391,11 +397,11 @@ func (h *SlackEventHandler) sample(ctx context.Context) error {
 		return err
 	}
 
-	// https://github.com/slack-go/slack/pull/1293 channel got optional
 	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
 		Reader:   file,
 		FileSize: int(stat.Size()), // random value
 		Filename: imgName,
+		Channel:  channelId,
 	})
 	log.Println(fSummary)
 	return err
