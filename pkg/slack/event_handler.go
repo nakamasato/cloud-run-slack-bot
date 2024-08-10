@@ -279,7 +279,13 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	}
 	log.Println(f)
 	blocks := []slack.Block{
-		slack.NewImageBlock(f.URLPrivate, "Request Count", "Request Count", slack.NewTextBlockObject("title", "title", false, false)),
+		// slack.NewImageBlock(f.URLPrivate, "Request Count", "Request Count", slack.NewTextBlockObject("title", "title", false, false)),
+		slack.ImageBlock{
+			Type:     slack.MBTImage,
+			ImageURL: f.URLPrivate,
+			AltText:  "Request Count",
+			Title:    slack.NewTextBlockObject("title", "title", false, false),
+		},
 	}
 	fields := []slack.AttachmentField{}
 	for k, v := range *seriesMap {
