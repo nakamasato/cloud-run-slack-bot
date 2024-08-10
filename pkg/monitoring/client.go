@@ -192,12 +192,6 @@ func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.List
 			continue
 		}
 		log.Printf("resp %v\n", resp.String())
-		var ok bool
-
-		if !ok {
-			log.Printf("Metric label 'revision_name' not found")
-			continue
-		}
 
 		for i, p := range resp.GetPoints() { // Point per min
 			log.Println(p.Value.String())
