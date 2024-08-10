@@ -168,6 +168,82 @@ func (mc *Client) GetRequestCountByLabel(ctx context.Context, label, labelType s
 	return &seriesMap, nil
 }
 
+func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeriesMap, error) {
+	it := mc.client.ListTimeSeries(ctx, req)
+	var requestCount int64
+	var loopCnt int
+	cnt := Counter{}
+	seriesMap := TimeSeriesMap{}
+	for {
+		resp, err := it.Next()
+		if err == iterator.Done {
+			log.Printf("iterator.Done %d\n", loopCnt)
+			break
+		}
+		pageInfo := it.PageInfo()
+		log.Printf("[page info] token:%s\tMaxSize:%d\n", pageInfo.Token, pageInfo.MaxSize)
+		if err != nil {
+			log.Printf("err %v\n", err)
+			return nil, err
+		}
+		if resp == nil {
+			log.Println("nil")
+			continue
+		}
+		log.Printf("resp %v\n", resp.String())
+		var labelValue string
+		var ok bool
+		labelValue, ok = resp.Resource.Labels["revision_name"]
+		if seriesMap[labelValue] == nil {
+			seriesMap[labelValue] = TimeSeries{}
+		}
+		if !ok {
+			log.Printf("Metric label 'revision_name' not found")
+			continue
+		}
+
+		for i, p := range resp.GetPoints() { // Point per min
+			log.Println(p.Value.String())
+			log.Printf("Latency Point:%d\t%s:%s\tstart:%s\tend:%s\tvalue:%d\n", i, "revision_name", labelValue, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
+			val := p.GetValue().GetDoubleValue()
+			seriesMap[labelValue] = append(seriesMap[labelValue], Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
+		}
+		loopCnt++
+	}
+	log.Printf("Request count:%d\nCounter:\n%s\nseriesMap:\n%s\n", requestCount, cnt, seriesMap)
+	return &seriesMap, nil
+}
+
+func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, service string, aggregationPeriod time.Duration, startTime, endTime time.Time) (*TimeSeriesMap, error) {
+	monCon := MonitorCondition{
+		Project: mc.project,
+		Filters: []MonitorFilter{
+			{"resource.labels.service_name": service},
+			{"metric.type": "run.googleapis.com/request_latencies"},
+		},
+	}
+	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
+	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endTime)
+	// monitoringpb.Aggregation_ALIGN_SUM
+	// monitoringpb.Aggregation_ALIGN_RATE
+	// monitoringpb.Aggregation_ALIGN_PERCENTILE_99
+	req := &monitoringpb.ListTimeSeriesRequest{
+		Name:   fmt.Sprintf("projects/%s", mc.project),
+		Filter: monCon.filter(),
+		Interval: &monitoringpb.TimeInterval{
+			StartTime: &timestamppb.Timestamp{Seconds: startTime.Unix()},
+			EndTime:   &timestamppb.Timestamp{Seconds: endTime.Unix()},
+		},
+		Aggregation: &monitoringpb.Aggregation{
+			AlignmentPeriod:  &durationpb.Duration{Seconds: int64(aggregationPeriod.Seconds())}, // The value must be at least 60 seconds.
+			PerSeriesAligner: monitoringpb.Aggregation_ALIGN_PERCENTILE_99,                      // p99
+			GroupByFields:    []string{"resource.revision_name"},
+		},
+		// PageSize: int32(10000), 100,000 if empty
+	}
+	return mc.AggregateLatencies(ctx, req)
+}
+
 func (mc *Client) Close() error {
 	return mc.client.Close()
 }

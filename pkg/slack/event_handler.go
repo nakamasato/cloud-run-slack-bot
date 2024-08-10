@@ -96,7 +96,7 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 			if !ok {
 				return h.list(ctx, e.Channel, ActionIdMetricsService)
 			}
-			return h.getServiceMetrics(ctx, e.Channel, currentService, defaultDuration, defaultAggregationPeriod)
+			return h.getServiceMetrics(ctx, e.Channel, currentService, "latency", defaultDuration, defaultAggregationPeriod)
 		case "set", "s":
 			return h.list(ctx, e.Channel, ActionIdCurrentService)
 		case "help", "h":
@@ -122,7 +122,7 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			return h.describeService(ctx, interaction.Channel.ID, action.SelectedOption.Value)
 		case ActionIdMetricsService:
 			h.memory.Set(interaction.User.ID, action.SelectedOption.Value)
-			return h.getServiceMetrics(ctx, interaction.Channel.ID, action.SelectedOption.Value, defaultDuration, defaultAggregationPeriod)
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, action.SelectedOption.Value, "latency", defaultDuration, defaultAggregationPeriod)
 		case ActionIdCurrentService:
 			return h.setCurrentService(ctx, interaction.Channel.ID, interaction.User.ID, action.SelectedOption.Value)
 		}
@@ -143,7 +143,7 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			if !ok {
 				aggregationPeriod = defaultAggregationPeriod
 			}
-			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, duration, aggregationPeriod)
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, "latency", duration, aggregationPeriod)
 		}
 
 	}
@@ -218,12 +218,21 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 	return err
 }
 
-func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName string, duration, aggregationPeriod time.Duration) error {
+func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName, metricsType string, duration, aggregationPeriod time.Duration) error {
 	now := time.Now().UTC()
 	endTime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
 
 	startTime := endTime.Add(-1 * duration).UTC()
-	seriesMap, err := h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggregationPeriod, startTime, endTime)
+	var seriesMap *monitoring.TimeSeriesMap
+	var err error
+	var title string
+	if metricsType == "latency" {
+		title = "Request Latency"
+		seriesMap, err = h.mClient.GetCloudRunServiceRequestLatencies(ctx, svcName, aggregationPeriod, startTime, endTime)
+	} else {
+		title = "Request Count"
+		seriesMap, err = h.mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggregationPeriod, startTime, endTime)
+	}
 
 	if err != nil {
 		_, _, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
@@ -244,7 +253,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	log.Printf("imgName: %s\n", imgName)
 
-	size, err := visualize.Visualize("Request Count", imgName, startTime, endTime, aggregationPeriod, seriesMap)
+	size, err := visualize.Visualize(title, imgName, startTime, endTime, aggregationPeriod, seriesMap)
 	if err != nil {
 		log.Println(err)
 		return nil
