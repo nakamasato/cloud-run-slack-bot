@@ -131,7 +131,8 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 		switch callbackId {
 		case ActionIdMetrics:
 			durationVal := interaction.ActionCallback.AttachmentActions[0].SelectedOptions[0].Value
-			metricsTypeVal := interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
+			log.Printf("test: %v\n", interaction.ActionCallback.AttachmentActions)
+			// metricsTypeVal := interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
 			svc, ok := h.memory.Get(interaction.User.ID)
 			if !ok {
 				return h.list(ctx, interaction.Channel.ID, ActionIdMetricsService)
@@ -144,7 +145,7 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			if !ok {
 				aggregationPeriod = defaultAggregationPeriod
 			}
-			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, metricsTypeVal, duration, aggregationPeriod)
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, svc, "latency", duration, aggregationPeriod)
 		}
 
 	}
