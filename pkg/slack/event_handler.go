@@ -267,6 +267,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		Filename: imgName,
 		Channel:  channelId,
 	})
+	log.Println(fSummary)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -276,15 +277,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	if err != nil {
 		return err
 	}
-
-	// f, err := h.client.UploadFileContext(ctx, slack.FileUploadParameters{
-	// 	Reader:   file,
-	// 	Filename: imgName,
-	// 	Filetype: "png",
-	// })
-	// if err != nil {
-	// 	return err
-	// }
+	log.Println(f)
 
 	fields := []slack.AttachmentField{}
 	for k, v := range *seriesMap {
@@ -329,7 +322,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	}
 	_, _, err = h.client.PostMessageContext(
 		ctx, channelId,
-		slack.MsgOptionText(fmt.Sprintf("`%s`", svcName), false),
+		slack.MsgOptionText(fmt.Sprintf("`%s`: %s", svcName, f.URLPrivate), false),
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
