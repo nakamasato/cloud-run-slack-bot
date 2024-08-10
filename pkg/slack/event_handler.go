@@ -280,10 +280,11 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	log.Println(f.URLPrivate)
 	blocks := []slack.Block{
 		// slack.NewImageBlock(f.URLPrivate, "Request Count", "Request Count", slack.NewTextBlockObject("title", "title", false, false)),
+		// slack.NewImageBlock(f.URLPrivate, "Resource Count", "resource_count", slack.NewTextBlockObject(slack, text string, emoji bool, verbatim bool))
 		slack.ImageBlock{
-			Type:     slack.MBTImage,
-			ImageURL: f.URLPrivate,
-			AltText:  "RequestCount",
+			Type:     "image",
+			ImageURL: "https://files.slack.com/files-pri/TK8MCGJHH-F07GD216W4S/cloud-run-slack-bot-metrics.png",
+			AltText:  "inspiration",
 		},
 	}
 	fields := []slack.AttachmentField{}
