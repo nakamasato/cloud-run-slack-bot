@@ -168,12 +168,12 @@ func (mc *Client) GetRequestCountByLabel(ctx context.Context, label, labelType s
 	return &seriesMap, nil
 }
 
-func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeriesMap, error) {
+func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeries, error) {
 	it := mc.client.ListTimeSeries(ctx, req)
 	var requestCount int64
 	var loopCnt int
 	cnt := Counter{}
-	seriesMap := TimeSeriesMap{}
+	series := TimeSeries{}
 	labelValue := "p99"
 	for {
 		resp, err := it.Next()
@@ -197,12 +197,12 @@ func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.List
 			log.Println(p.Value.String())
 			log.Printf("Latency Point:%d\t%s:%s\tstart:%s\tend:%s\tvalue:%d\n", i, "revision_name", labelValue, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
 			val := p.GetValue().GetDoubleValue()
-			seriesMap[labelValue] = append(seriesMap[labelValue], Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
+			series = append(series, Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
 		}
 		loopCnt++
 	}
-	log.Printf("Request count:%d\nCounter:\n%s\nseriesMap:\n%s\n", requestCount, cnt, seriesMap)
-	return &seriesMap, nil
+	log.Printf("Request count:%d\nCounter:\n%s\nseries:\n%s\n", requestCount, cnt, series)
+	return &series, nil
 }
 
 func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, service string, aggregationPeriod time.Duration, startTime, endTime time.Time) (*TimeSeriesMap, error) {
@@ -215,23 +215,34 @@ func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, servic
 	}
 	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
 	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endTime)
-	// monitoringpb.Aggregation_ALIGN_SUM
-	// monitoringpb.Aggregation_ALIGN_RATE
-	// monitoringpb.Aggregation_ALIGN_PERCENTILE_99
-	req := &monitoringpb.ListTimeSeriesRequest{
-		Name:   fmt.Sprintf("projects/%s", mc.project),
-		Filter: monCon.filter(),
-		Interval: &monitoringpb.TimeInterval{
-			StartTime: &timestamppb.Timestamp{Seconds: startTime.Unix()},
-			EndTime:   &timestamppb.Timestamp{Seconds: endTime.Unix()},
-		},
-		Aggregation: &monitoringpb.Aggregation{
-			AlignmentPeriod:  &durationpb.Duration{Seconds: int64(aggregationPeriod.Seconds())}, // The value must be at least 60 seconds.
-			PerSeriesAligner: monitoringpb.Aggregation_ALIGN_PERCENTILE_99,                      // p99
-		},
-		// PageSize: int32(10000), 100,000 if empty
+	aligners := []monitoringpb.Aggregation_Aligner{
+		monitoringpb.Aggregation_ALIGN_PERCENTILE_50,
+		monitoringpb.Aggregation_ALIGN_PERCENTILE_95,
+		monitoringpb.Aggregation_ALIGN_PERCENTILE_99,
 	}
-	return mc.AggregateLatencies(ctx, req)
+	timeSeriesMap := TimeSeriesMap{}
+
+	for _, aligner := range aligners {
+		req := &monitoringpb.ListTimeSeriesRequest{
+			Name:   fmt.Sprintf("projects/%s", mc.project),
+			Filter: monCon.filter(),
+			Interval: &monitoringpb.TimeInterval{
+				StartTime: &timestamppb.Timestamp{Seconds: startTime.Unix()},
+				EndTime:   &timestamppb.Timestamp{Seconds: endTime.Unix()},
+			},
+			Aggregation: &monitoringpb.Aggregation{
+				AlignmentPeriod:  &durationpb.Duration{Seconds: int64(aggregationPeriod.Seconds())}, // The value must be at least 60 seconds.
+				PerSeriesAligner: aligner,
+			},
+			// PageSize: int32(10000), 100,000 if empty
+		}
+		series, err := mc.AggregateLatencies(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		timeSeriesMap[aligner.String()] = *series
+	}
+	return &timeSeriesMap, nil
 }
 
 func (mc *Client) Close() error {
