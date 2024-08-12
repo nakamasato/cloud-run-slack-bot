@@ -209,8 +209,7 @@ func (mc *Client) aggregateRequestLatency(ctx context.Context, req *monitoringpb
 		mc.logger.Info("successfully got page info", zap.String("resp", resp.String()))
 
 		for i, p := range resp.GetPoints() { // Point per min
-			log.Println(p.Value.String())
-			mc.logger.Info("Latency Point", zap.Int("i", i), zap.Time("start", p.Interval.StartTime.AsTime()), zap.Time("end", p.Interval.EndTime.AsTime()), zap.Int64("value", p.Value.GetInt64Value()))
+			mc.logger.Info("Latency Point", zap.Int("i", i), zap.Time("start", p.Interval.StartTime.AsTime()), zap.Time("end", p.Interval.EndTime.AsTime()), zap.Float64("value", p.GetValue().GetDoubleValue()))
 			val := p.GetValue().GetDoubleValue()
 			series = append(series, Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
 		}
