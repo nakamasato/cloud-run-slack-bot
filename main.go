@@ -10,6 +10,7 @@ import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/tracing"
 	"github.com/slack-go/slack"
 	"go.uber.org/zap"
 )
@@ -23,9 +24,21 @@ func main() {
 	}
 	defer func() {
 		if err := logger.Sync(); err != nil {
-			log.Printf("Error syncing logger: %v", err)
+			log.Fatalf("Error syncing logger: %v", err)
 		}
 	}()
+
+	// Setup metrics, tracing, and context propagation
+	shutdown, err := tracing.SetupOpenTelemetry(ctx)
+	if err != nil {
+		logger.Fatal("error setting up OpenTelemetry", zap.Error(err))
+		os.Exit(1)
+	}
+	defer func(ctx context.Context) {
+		if err := shutdown(ctx); err != nil {
+			logger.Fatal("error shutting down OpenTelemetry", zap.Error(err))
+		}
+	}(ctx)
 
 	project := os.Getenv("PROJECT")
 	if project == "" {
