@@ -12,9 +12,12 @@ import (
 )
 
 var predefinedColorMap = map[string]drawing.Color{
-	"2xx": chart.ColorAlternateGreen,
-	"4xx": chart.ColorAlternateYellow,
-	"5xx": chart.ColorRed,
+	"2xx":                 chart.ColorAlternateGreen,
+	"4xx":                 chart.ColorAlternateYellow,
+	"5xx":                 chart.ColorRed,
+	"ALIGN_PERCENTILE_99": chart.ColorBlue,
+	"ALIGN_PERCENTILE_90": chart.ColorCyan,
+	"ALIGN_PERCENTILE_50": chart.ColorOrange,
 }
 
 // Visualize draw a line chart and export to a file.
