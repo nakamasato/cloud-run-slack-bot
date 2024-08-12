@@ -73,8 +73,42 @@ type SlackEventHandler struct {
 	tmpDir string
 }
 
-func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Service, mClient *monitoring.Client, logger *zap.Logger, tmpDir string) *SlackEventHandler {
-	return &SlackEventHandler{client: client, rClient: rClient, mClient: mClient, memory: NewMemory(), logger: logger, tmpDir: tmpDir}
+type ServiceOption func(*SlackEventHandler)
+
+func WithLogger(l *zap.Logger) ServiceOption {
+	return func(s *SlackEventHandler) {
+		s.logger = l
+	}
+}
+
+func WithTmpDir(d string) ServiceOption {
+	return func(s *SlackEventHandler) {
+		s.tmpDir = d
+	}
+}
+
+func WithMemory(m *Memory) ServiceOption {
+	return func(s *SlackEventHandler) {
+		s.memory = m
+	}
+}
+
+
+func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Service, mClient *monitoring.Client, opts ...ServiceOption) *SlackEventHandler {
+	s := &SlackEventHandler{client: client, rClient: rClient, mClient: mClient}
+	for _, opt := range opts {
+		opt(s)
+	}
+	if s.logger == nil {
+		s.logger = zap.NewExample()
+	}
+	if s.memory == nil {
+		s.memory = NewMemory()
+	}
+	if s.tmpDir == "" {
+		s.tmpDir = os.TempDir()
+	}
+	return s
 }
 
 // NewSlackEventHandler handles AppMention events

@@ -7,6 +7,7 @@ import (
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrunslackbot"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
@@ -16,9 +17,9 @@ import (
 func main() {
 	ctx := context.Background()
 
-	logger, err := zap.NewProduction()
+	logger, err := logging.New(ctx)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to create logging client: %v", err)
 	}
 	defer func() {
 		if err := logger.Sync(); err != nil {
@@ -53,7 +54,7 @@ func main() {
 	}
 
 	sClient := slack.New(os.Getenv("SLACK_BOT_TOKEN"), ops...)
-	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, logger, os.Getenv("TMP_DIR"))
+	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, slackinternal.WithLogger(logger), slackinternal.WithTmpDir(os.Getenv("TMP_DIR")))
 	svc := cloudrunslackbot.NewCloudRunSlackBotService(
 		sClient,
 		os.Getenv("SLACK_CHANNEL"),

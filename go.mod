@@ -4,6 +4,7 @@ go 1.21.4
 
 require (
 	cloud.google.com/go/monitoring v1.20.4
+	github.com/blendle/zapdriver v1.3.1
 	github.com/slack-go/slack v0.13.1
 	github.com/wcharczuk/go-chart/v2 v2.1.1
 	go.uber.org/zap v1.27.0

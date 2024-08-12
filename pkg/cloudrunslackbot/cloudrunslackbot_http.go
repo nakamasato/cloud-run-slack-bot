@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/pubsub"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
@@ -57,8 +58,8 @@ func NewCloudRunSlackBotHttp(channel string, sClient *slack.Client, handler *sla
 
 // SlackEventsHandler starts http server
 func (svc *CloudRunSlackBotHttp) Run() {
-	http.HandleFunc("/slack/events", svc.SlackEventsHandler())
-	http.HandleFunc("/slack/interaction", svc.SlackInteractionHandler())
+	http.Handle("/slack/events", logging.Middleware(svc.SlackEventsHandler()))
+	http.Handle("/slack/interaction", logging.Middleware(svc.SlackInteractionHandler()))
 	http.HandleFunc("/cloudrun/events", svc.auditHandler.HandleCloudRunAuditLogs)
 	svc.logger.Info("Server listening")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
