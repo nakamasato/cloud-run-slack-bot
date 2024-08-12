@@ -7,12 +7,12 @@ import (
 func TestCloudRunService_GetMetricsUrl(t *testing.T) {
 	tests := []struct {
 		name string
-		c    *CloudRunService
+		c    *CloudRunInfo
 		want string
 	}{
 		{
 			name: "test",
-			c: &CloudRunService{
+			c: &CloudRunInfo{
 				Name:    "test",
 				Region:  "asia-northeast1",
 				Project: "project",
@@ -32,12 +32,12 @@ func TestCloudRunService_GetMetricsUrl(t *testing.T) {
 func TestCloudRunService_GetYamlUrl(t *testing.T) {
 	tests := []struct {
 		name string
-		c    *CloudRunService
+		c    *CloudRunInfo
 		want string
 	}{
 		{
 			name: "test",
-			c: &CloudRunService{
+			c: &CloudRunInfo{
 				Name:    "test",
 				Region:  "asia-northeast1",
 				Project: "project",
