@@ -41,7 +41,7 @@ func main() {
 	}
 	defer mClient.Close()
 
-	rClient, err := cloudrun.NewClient(ctx, project, region)
+	rClient, err := cloudrun.NewClient(ctx, cloudrun.WithLogger(logger), cloudrun.WithProject(project), cloudrun.WithRegion(region))
 	if err != nil {
 		logger.Fatal("Failed to create run service", zap.Error(err))
 	}

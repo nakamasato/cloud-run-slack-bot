@@ -10,6 +10,7 @@ import (
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
+	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -69,16 +70,28 @@ func (c *MonitorCondition) filter() string {
 type Client struct {
 	project string
 	client  *monitoring.MetricClient
+	logger  *zap.Logger
 }
 
-func NewMonitoringClient(project string) (*Client, error) {
+type ClientOption func(*Client)
+
+func NewMonitoringClient(project string, opts ...ClientOption) (*Client, error) {
 	ctx := context.Background()
 	client, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
 		return nil, err
 	}
 	log.Printf("Monitoring client created for project %s\n", project)
-	return &Client{project: project, client: client}, nil
+	c := &Client{project: project, client: client}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+	// default logger
+	if c.logger == nil {
+		c.logger = zap.NewExample()
+	}
+	return c, nil
 }
 
 func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service string, aggregationPeriod time.Duration, startTime, endTime time.Time) (*TimeSeriesMap, error) {
@@ -90,7 +103,7 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 		},
 	}
 	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
-	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endTime)
+	mc.logger.Info("get metrics", zap.String("project", mc.project), zap.String("filter", monCon.filter()), zap.Time("start", startTime), zap.Time("end", endTime))
 	// monitoringpb.Aggregation_ALIGN_SUM
 	// monitoringpb.Aggregation_ALIGN_RATE
 	// monitoringpb.Aggregation_ALIGN_PERCENTILE_99
@@ -121,19 +134,19 @@ func (mc *Client) aggregateRequestCount(ctx context.Context, label, labelType st
 	for {
 		resp, err := it.Next()
 		if err == iterator.Done {
-			log.Printf("iterator.Done %d\n", loopCnt)
+			mc.logger.Info("iterator.Done", zap.Int("loopCnt", loopCnt))
 			break
 		}
 		pageInfo := it.PageInfo()
-		log.Printf("[page info] token:%s\tMaxSize:%d\n", pageInfo.Token, pageInfo.MaxSize)
+		mc.logger.Info("page info", zap.String("token", pageInfo.Token), zap.Int("maxSize", pageInfo.MaxSize))
 		if err != nil {
-			log.Printf("err %v\n", err)
+			mc.logger.Error("error", zap.Error(err))
 			return nil, err
 		}
 		if resp == nil {
 			continue
 		}
-		log.Printf("resp %v\n", resp.String())
+		mc.logger.Info("resp", zap.String("resp", resp.String()))
 		var labelValue string
 		var ok bool
 		switch labelType {
@@ -142,20 +155,19 @@ func (mc *Client) aggregateRequestCount(ctx context.Context, label, labelType st
 		case "resource":
 			labelValue, ok = resp.Resource.Labels[label]
 		default:
-			log.Printf("Invalid label type %s\n", labelType)
-			return nil, fmt.Errorf("invalid label type %s", labelType)
+			mc.logger.Error("invalid label type", zap.String("labelType", labelType))
+			return nil, err
 		}
 		if seriesMap[labelValue] == nil {
 			seriesMap[labelValue] = TimeSeries{}
 		}
 		if !ok {
-			log.Printf("Metric label '%s' not found", label)
+			mc.logger.Error("Metric label not found", zap.String("label", label))
 			continue
 		}
 
 		for i, p := range resp.GetPoints() { // Point per min
-			log.Println(p.Value.String())
-			log.Printf("Point:%d\t%s:%s\tstart:%s\tend:%s\tvalue:%d\n", i, label, labelValue, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
+			mc.logger.Info("Point", zap.Int("i", i), zap.String("label", label), zap.String("labelValue", labelValue), zap.Time("start", p.Interval.StartTime.AsTime()), zap.Time("end", p.Interval.EndTime.AsTime()), zap.Int64("value", p.Value.GetInt64Value()))
 			val := p.GetValue().GetInt64Value()
 			requestCount += val
 			cnt[labelValue] += val
@@ -163,43 +175,42 @@ func (mc *Client) aggregateRequestCount(ctx context.Context, label, labelType st
 		}
 		loopCnt++
 	}
-	log.Printf("Request count:%d\nCounter:\n%s\nseriesMap:\n%s\n", requestCount, cnt, seriesMap)
+	mc.logger.Info("Request count", zap.Int64("requestCount", requestCount), zap.Any("counter", cnt), zap.Any("seriesMap", seriesMap))
 	return &seriesMap, nil
 }
 
 func (mc *Client) aggregateRequestLatency(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeries, error) {
 	it := mc.client.ListTimeSeries(ctx, req)
-	var requestCount int64
 	var loopCnt int
 	cnt := Counter{}
 	series := TimeSeries{}
 	for {
 		resp, err := it.Next()
 		if err == iterator.Done {
-			log.Printf("iterator.Done %d\n", loopCnt)
+			mc.logger.Info("iterator.Done", zap.Int("loopCnt", loopCnt))
 			break
 		}
 		pageInfo := it.PageInfo()
-		log.Printf("[page info] token:%s\tMaxSize:%d\n", pageInfo.Token, pageInfo.MaxSize)
+		mc.logger.Info("page info", zap.String("token", pageInfo.Token), zap.Int("maxSize", pageInfo.MaxSize))
 		if err != nil {
-			log.Printf("err %v\n", err)
+			mc.logger.Error("failed to get page info", zap.Error(err))
 			return nil, err
 		}
 		if resp == nil {
-			log.Println("nil")
+			mc.logger.Info("page info resp is nil")
 			continue
 		}
-		log.Printf("resp %v\n", resp.String())
+		mc.logger.Info("successfully got page info", zap.String("resp", resp.String()))
 
 		for i, p := range resp.GetPoints() { // Point per min
 			log.Println(p.Value.String())
-			log.Printf("Latency Point:%d\tstart:%s\tend:%s\tvalue:%d\n", i, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
+			mc.logger.Info("Latency Point", zap.Int("i", i), zap.Time("start", p.Interval.StartTime.AsTime()), zap.Time("end", p.Interval.EndTime.AsTime()), zap.Int64("value", p.Value.GetInt64Value()))
 			val := p.GetValue().GetDoubleValue()
 			series = append(series, Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
 		}
 		loopCnt++
 	}
-	log.Printf("Request count:%d\nCounter:\n%s\nseries:\n%s\n", requestCount, cnt, series)
+	mc.logger.Info("Request Latency", zap.Any("counter", cnt), zap.Any("series", series), zap.Int("loopCnt", loopCnt))
 	return &series, nil
 }
 
@@ -212,7 +223,7 @@ func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, servic
 		},
 	}
 	// See https://pkg.go.dev/cloud.google.com/go/monitoring/apiv3/v2/monitoringpb#ListTimeSeriesRequest.
-	log.Printf("[%s] get metrics %s (%s -> %s)\n", mc.project, monCon.filter(), startTime, endTime)
+	mc.logger.Info("get metrics", zap.String("project", mc.project), zap.String("filter", monCon.filter()), zap.Time("start", startTime), zap.Time("end", endTime))
 	aligners := []monitoringpb.Aggregation_Aligner{
 		monitoringpb.Aggregation_ALIGN_PERCENTILE_50,
 		monitoringpb.Aggregation_ALIGN_PERCENTILE_95,
@@ -236,6 +247,7 @@ func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, servic
 		}
 		series, err := mc.aggregateRequestLatency(ctx, req)
 		if err != nil {
+			mc.logger.Error("failed to get request latency", zap.Error(err))
 			return nil, err
 		}
 		timeSeriesMap[aligner.String()] = *series

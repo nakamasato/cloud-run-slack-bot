@@ -64,7 +64,7 @@ type SlackEventHandler struct {
 	// Cloud Monitoring Client
 	mClient *monitoring.Client
 	// Cloud Run Client
-	rClient *cloudrun.Client
+	rClient *cloudrun.Service
 	// logger
 	logger *zap.Logger
 	// Memory for storing target cloud run service
@@ -73,7 +73,7 @@ type SlackEventHandler struct {
 	tmpDir string
 }
 
-func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Client, mClient *monitoring.Client, logger *zap.Logger, tmpDir string) *SlackEventHandler {
+func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Service, mClient *monitoring.Client, logger *zap.Logger, tmpDir string) *SlackEventHandler {
 	return &SlackEventHandler{client: client, rClient: rClient, mClient: mClient, memory: NewMemory(), logger: logger, tmpDir: tmpDir}
 }
 
