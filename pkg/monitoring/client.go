@@ -108,11 +108,11 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 		},
 		// PageSize: int32(10000), 100,000 if empty
 	}
-	return mc.GetRequestCountByLabel(ctx, "response_code_class", "metric", req)
+	return mc.aggregateRequestCount(ctx, "response_code_class", "metric", req)
 }
 
 // labelType: metric or resource
-func (mc *Client) GetRequestCountByLabel(ctx context.Context, label, labelType string, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeriesMap, error) {
+func (mc *Client) aggregateRequestCount(ctx context.Context, label, labelType string, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeriesMap, error) {
 	it := mc.client.ListTimeSeries(ctx, req)
 	var requestCount int64
 	var loopCnt int
@@ -131,7 +131,6 @@ func (mc *Client) GetRequestCountByLabel(ctx context.Context, label, labelType s
 			return nil, err
 		}
 		if resp == nil {
-			log.Println("nil")
 			continue
 		}
 		log.Printf("resp %v\n", resp.String())
@@ -168,13 +167,12 @@ func (mc *Client) GetRequestCountByLabel(ctx context.Context, label, labelType s
 	return &seriesMap, nil
 }
 
-func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeries, error) {
+func (mc *Client) aggregateRequestLatency(ctx context.Context, req *monitoringpb.ListTimeSeriesRequest) (*TimeSeries, error) {
 	it := mc.client.ListTimeSeries(ctx, req)
 	var requestCount int64
 	var loopCnt int
 	cnt := Counter{}
 	series := TimeSeries{}
-	labelValue := "p99"
 	for {
 		resp, err := it.Next()
 		if err == iterator.Done {
@@ -195,7 +193,7 @@ func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.List
 
 		for i, p := range resp.GetPoints() { // Point per min
 			log.Println(p.Value.String())
-			log.Printf("Latency Point:%d\t%s:%s\tstart:%s\tend:%s\tvalue:%d\n", i, "revision_name", labelValue, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
+			log.Printf("Latency Point:%d\tstart:%s\tend:%s\tvalue:%d\n", i, p.Interval.StartTime.AsTime(), p.Interval.EndTime.AsTime(), p.Value.GetInt64Value())
 			val := p.GetValue().GetDoubleValue()
 			series = append(series, Point{Time: p.Interval.StartTime.AsTime(), Val: float64(val)})
 		}
@@ -236,7 +234,7 @@ func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, servic
 			},
 			// PageSize: int32(10000), 100,000 if empty
 		}
-		series, err := mc.AggregateLatencies(ctx, req)
+		series, err := mc.aggregateRequestLatency(ctx, req)
 		if err != nil {
 			return nil, err
 		}
