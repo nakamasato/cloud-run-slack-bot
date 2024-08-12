@@ -75,6 +75,12 @@ type Client struct {
 
 type ClientOption func(*Client)
 
+func WithLogger(l *zap.Logger) ClientOption {
+	return func(c *Client) {
+		c.logger = l
+	}
+}
+
 func NewMonitoringClient(project string, opts ...ClientOption) (*Client, error) {
 	ctx := context.Background()
 	client, err := monitoring.NewMetricClient(ctx)

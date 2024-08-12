@@ -35,7 +35,7 @@ func main() {
 		logger.Fatal("REGION env var is required")
 	}
 
-	mClient, err := monitoring.NewMonitoringClient(project)
+	mClient, err := monitoring.NewMonitoringClient(project, monitoring.WithLogger(logger))
 	if err != nil {
 		logger.Fatal("failed to initialize monitoring client", zap.Error(err))
 	}
