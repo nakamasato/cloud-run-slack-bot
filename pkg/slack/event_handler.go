@@ -15,6 +15,7 @@ import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/visualize"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"go.uber.org/zap"
 )
 
 const (
@@ -64,14 +65,16 @@ type SlackEventHandler struct {
 	mClient *monitoring.Client
 	// Cloud Run Client
 	rClient *cloudrun.Client
+	// logger
+	logger *zap.Logger
 	// Memory for storing target cloud run service
 	memory *Memory
 	// Temporary directory for storing images
 	tmpDir string
 }
 
-func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Client, mClient *monitoring.Client, tmpDir string) *SlackEventHandler {
-	return &SlackEventHandler{client: client, rClient: rClient, mClient: mClient, memory: NewMemory(), tmpDir: tmpDir}
+func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Client, mClient *monitoring.Client, logger *zap.Logger, tmpDir string) *SlackEventHandler {
+	return &SlackEventHandler{client: client, rClient: rClient, mClient: mClient, memory: NewMemory(), logger: logger, tmpDir: tmpDir}
 }
 
 // NewSlackEventHandler handles AppMention events
@@ -85,7 +88,7 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 		if len(message) > 1 {
 			command = message[1] // e.Text is "<@bot_id> command"
 		}
-		log.Printf("command: %s\n", command)
+		h.logger.Info("command", zap.String("command", command))
 		currentService, ok := h.memory.Get(e.User)
 		switch command {
 		case "describe", "d":
@@ -142,8 +145,7 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 				}
 			}
 
-			log.Printf("test: %d\n", len(interaction.ActionCallback.AttachmentActions))
-			// metricsTypeVal := interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
+			h.logger.Info("action metrics", zap.String("duration", durationVal), zap.String("metricsType", metricsTypeVal))
 			svc, ok := h.memory.Get(interaction.User.ID)
 			if !ok {
 				return h.list(ctx, interaction.Channel.ID, ActionIdMetricsService)
@@ -262,9 +264,9 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		return err
 	}
 
-	log.Println("visualizing")
+	h.logger.Info("visualizing")
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
-	log.Printf("imgName: %s\n", imgName)
+	h.logger.Info("image name", zap.String("imgName", imgName))
 
 	size, err := visualize.Visualize(title, imgName, startTime, endTime, aggregationPeriod, seriesMap)
 	if err != nil {

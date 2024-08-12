@@ -10,29 +10,40 @@ import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
+	"go.uber.org/zap"
 )
 
 func main() {
-	var err error
+	ctx := context.Background()
+
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			log.Printf("Error syncing logger: %v", err)
+		}
+	}()
+
 	project := os.Getenv("PROJECT")
 	if project == "" {
-		log.Fatal("PROJECT env var is required")
+		logger.Fatal("PROJECT env var is required")
 	}
 	region := os.Getenv("REGION")
 	if region == "" {
-		log.Fatal("REGION env var is required")
+		logger.Fatal("REGION env var is required")
 	}
 
 	mClient, err := monitoring.NewMonitoringClient(project)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("failed to initialize monitoring client", zap.Error(err))
 	}
 	defer mClient.Close()
 
-	ctx := context.Background()
 	rClient, err := cloudrun.NewClient(ctx, project, region)
 	if err != nil {
-		log.Fatalf("Failed to create run service: %v", err)
+		logger.Fatal("Failed to create run service", zap.Error(err))
 	}
 
 	ops := []slack.Option{}
@@ -42,7 +53,7 @@ func main() {
 	}
 
 	sClient := slack.New(os.Getenv("SLACK_BOT_TOKEN"), ops...)
-	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, os.Getenv("TMP_DIR"))
+	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, logger, os.Getenv("TMP_DIR"))
 	svc := cloudrunslackbot.NewCloudRunSlackBotService(
 		sClient,
 		os.Getenv("SLACK_CHANNEL"),
