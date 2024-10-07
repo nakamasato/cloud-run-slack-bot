@@ -8,7 +8,7 @@ require (
 	github.com/slack-go/slack v0.14.0
 	github.com/wcharczuk/go-chart/v2 v2.1.2
 	google.golang.org/api v0.199.0
-	google.golang.org/protobuf v1.34.2
+	google.golang.org/protobuf v1.35.1
 )
 
 require (
