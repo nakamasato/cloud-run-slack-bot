@@ -4,7 +4,7 @@ go 1.21.4
 
 require (
 	cloud.google.com/go/logging v1.12.0
-	cloud.google.com/go/monitoring v1.21.1
+	cloud.google.com/go/monitoring v1.21.2
 	github.com/slack-go/slack v0.15.0
 	github.com/wcharczuk/go-chart/v2 v2.1.2
 	google.golang.org/api v0.203.0
