@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/monitoring v1.22.0
 	github.com/slack-go/slack v0.15.0
 	github.com/wcharczuk/go-chart/v2 v2.1.2
-	google.golang.org/api v0.213.0
+	google.golang.org/api v0.214.0
 	google.golang.org/protobuf v1.36.0
 )
 
@@ -36,7 +36,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/image v0.18.0 // indirect
-	golang.org/x/net v0.32.0 // indirect
+	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
