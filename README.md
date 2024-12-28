@@ -27,6 +27,7 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 1. `PROJECT`: GCP Project ID to monitor
 1. `REGION`: GCP Region to monitor
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
+1. `SLACK_SIGNING_SECRET`: Slack bot signing secret
 1. `SLACK_APP_TOKEN` (optional): Slack oauth token (required for `SLACK_APP_MODE=socket`)
 1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
 1. `SLACK_CHANNEL` (optional): Slack Channel ID to receive notification for Cloud Run audit logs
@@ -43,9 +44,13 @@ REGION=asia-northeast1
 
 ```shell
 echo -n "xoxb-xxxx" | gcloud secrets create slack-bot-token --replication-policy automatic --project "$PROJECT" --data-file=-
+echo -n "your-signing-secret" | gcloud secrets create slack-signing-secret --replication-policy automatic --project "$PROJECT" --data-file=-
 gcloud iam service-accounts create cloud-run-slack-bot --project $PROJECT
 # allow app to access the secret
 gcloud secrets add-iam-policy-binding slack-bot-token \
+    --member="serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor" --project ${PROJECT}
+gcloud secrets add-iam-policy-binding slack-signing-secret \
     --member="serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor" --project ${PROJECT}
 # allow app to get information about Cloud Run services
@@ -60,7 +65,7 @@ Deploy to Cloud Run
 
 ```
 gcloud run deploy cloud-run-slack-bot \
-    --set-secrets SLACK_BOT_TOKEN=slack-bot-token:latest \
+    --set-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest" \
     --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp" \
     --image nakamasato/cloud-run-slack-bot:0.0.2 \
     --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
