@@ -39,16 +39,16 @@ func SetupOpenTelemetry(ctx context.Context) (shutdown func(context.Context) err
 	otel.SetTracerProvider(tp)
 
 	// Configure Metric Export to send metrics as OTLP
-	mreader, err := autoexport.NewMetricReader(ctx)
-	if err != nil {
-		err = errors.Join(err, shutdown(ctx))
-		return
-	}
-	mp := metric.NewMeterProvider(
-		metric.WithReader(mreader),
-	)
-	shutdownFuncs = append(shutdownFuncs, mp.Shutdown)
-	otel.SetMeterProvider(mp)
+	// mreader, err := autoexport.NewMetricReader(ctx)
+	// if err != nil {
+	// 	err = errors.Join(err, shutdown(ctx))
+	// 	return
+	// }
+	// mp := metric.NewMeterProvider(
+	// 	metric.WithReader(mreader),
+	// )
+	// shutdownFuncs = append(shutdownFuncs, mp.Shutdown)
+	// otel.SetMeterProvider(mp)
 
 	return shutdown, nil
 }
