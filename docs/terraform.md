@@ -27,6 +27,20 @@ variable "channel" {
 `main.tf`
 
 ```hcl
+locals {
+  cloud_run_slack_bot_envs = {
+    PROJECT        = var.project
+    REGION         = var.region
+    SLACK_APP_MODE = "http"
+    SLACK_CHANNEL  = var.channel
+    TMP_DIR        = "/tmp"
+  }
+  cloud_run_slack_bot_secrets = {
+    SLACK_BOT_TOKEN      = google_secret_manager_secret.slack_bot_token_cloud_run_slack_bot.secret_id
+    SLACK_SIGNING_SECRET = google_secret_manager_secret.slack_signing_secret_cloud_run_slack_bot.secret_id
+  }
+}
+
 resource "google_service_account" "cloud_run_slack_bot" {
   account_id   = "cloud-run-slack-bot"
   display_name = "Cloud Run Slack Bot"
@@ -36,6 +50,7 @@ resource "google_project_iam_member" "cloud_run_slack_bot" {
   for_each = toset([
     "roles/run.viewer",
     "roles/monitoring.viewer",
+    "roles/cloudtrace.agent",
   ])
   project = var.project
   role    = each.value
@@ -43,12 +58,8 @@ resource "google_project_iam_member" "cloud_run_slack_bot" {
 }
 
 resource "google_secret_manager_secret_iam_member" "cloud_run_slack_bot_is_secret_accessor" {
-  for_each = {
-    for secret in [
-      google_secret_manager_secret.slack_bot_token_cloud_run_slack_bot,
-    ] : secret.secret_id => secret.project
-  }
-  project   = each.value
+  for_each  = toset([for _, secret_id in local.cloud_run_slack_bot_secrets : secret_id])
+  project   = var.project
   secret_id = each.key
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.cloud_run_slack_bot.member
@@ -62,48 +73,50 @@ resource "google_secret_manager_secret" "slack_bot_token_cloud_run_slack_bot" {
   }
 }
 
-// Import manually created secret manager
+resource "google_secret_manager_secret" "slack_signing_secret_cloud_run_slack_bot" {
+  secret_id = "slack-signing-secret-cloud-run-slack-bot"
+  replication {
+    auto {}
+  }
+}
+
 import {
-  id = "projects/${project}/secrets/slack-bot-token-cloud-run-slack-bot"
+  id = "projects/${var.project}/secrets/slack-bot-token-cloud-run-slack-bot"
   to = google_secret_manager_secret.slack_bot_token_cloud_run_slack_bot
 }
 
-resource "google_cloud_run_v2_service" "cloud-run-slack-bot" {
+import {
+  id = "projects/${var.project}/secrets/slack-signing-secret-cloud-run-slack-bot"
+  to = google_secret_manager_secret.slack_signing_secret_cloud_run_slack_bot
+}
+
+resource "google_cloud_run_v2_service" "cloud_run_slack_bot" {
   name     = "cloud-run-slack-bot"
-  location = var.region # asia-northeast1
+  location = var.region
 
   template {
     containers {
-      image = "nakamasato/cloud-run-slack-bot:0.0.5"
-      env {
-        name  = "PROJECT"
-        value = var.project
-      }
-      env {
-        name  = "REGION"
-        value = var.region
-      }
-
-      env {
-        name  = "SLACK_APP_MODE"
-        value = "http"
-      }
-
-      env {
-        name  = "TMP_DIR"
-        value = "/tmp"
-      }
-
-      env {
-        name = "SLACK_BOT_TOKEN"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.slack_bot_token_cloud_run_slack_bot.secret_id
-            version = "latest"
-          }
+      image = "nakamasato/cloud-run-slack-bot"
+      dynamic "env" {
+        for_each = local.cloud_run_slack_bot_envs
+        content {
+          name  = env.key
+          value = env.value
         }
       }
 
+      dynamic "env" {
+        for_each = local.cloud_run_slack_bot_secrets
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value
+              version = "latest"
+            }
+          }
+        }
+      }
     }
     service_account = google_service_account.cloud_run_slack_bot.email
   }
@@ -114,11 +127,12 @@ resource "google_cloud_run_v2_service" "cloud-run-slack-bot" {
       client_version,
     ]
   }
+  depends_on = [google_secret_manager_secret_iam_member.cloud_run_slack_bot_is_secret_accessor]
 }
 
-resource "google_cloud_run_v2_service_iam_binding" "cloud_run_slack_bot" {
-  name     = google_cloud_run_v2_service.cloud_run_slack_bot.name
+resource "google_cloud_run_service_iam_binding" "cloud_run_slack_bot" {
   location = google_cloud_run_v2_service.cloud_run_slack_bot.location
+  service  = google_cloud_run_v2_service.cloud_run_slack_bot.name
   role     = "roles/run.invoker"
   members = [
     "allUsers",
