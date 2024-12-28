@@ -44,7 +44,7 @@ REGION=asia-northeast1
 
 ```shell
 echo -n "xoxb-xxxx" | gcloud secrets create slack-bot-token --replication-policy automatic --project "$PROJECT" --data-file=-
-echo -n "xoxb-xxxx" | gcloud secrets create slack-signing-secret --replication-policy automatic --project "$PROJECT" --data-file=-
+echo -n "your-signing-secret" | gcloud secrets create slack-signing-secret --replication-policy automatic --project "$PROJECT" --data-file=-
 gcloud iam service-accounts create cloud-run-slack-bot --project $PROJECT
 # allow app to access the secret
 gcloud secrets add-iam-policy-binding slack-bot-token \
