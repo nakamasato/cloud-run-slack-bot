@@ -2,7 +2,6 @@ package cloudrunslackbot
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -102,27 +101,7 @@ func (svc *CloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFunc {
 
 func (svc *CloudRunSlackBotHttp) SlackInteractionHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Verify the request signature
-		sv, err := slack.NewSecretsVerifier(r.Header, svc.signingSecret)
-		if err != nil {
-			log.Printf("Failed to create secrets verifier: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		// For interaction endpoints, the payload is in the form value
 		payload := r.FormValue("payload")
-		if _, err := sv.Write([]byte(fmt.Sprintf("payload=%s", payload))); err != nil {
-			log.Printf("Failed to write body to verifier: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if err := sv.Ensure(); err != nil {
-			log.Printf("Failed to verify request signature: %v", err)
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
 		var interaction slack.InteractionCallback
 		if err := json.Unmarshal([]byte(payload), &interaction); err != nil {
 			log.Println(err)
@@ -130,7 +109,7 @@ func (svc *CloudRunSlackBotHttp) SlackInteractionHandler() http.HandlerFunc {
 			return
 		}
 
-		if err = svc.slackHandler.HandleInteraction(&interaction); err != nil {
+		if err := svc.slackHandler.HandleInteraction(&interaction); err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return

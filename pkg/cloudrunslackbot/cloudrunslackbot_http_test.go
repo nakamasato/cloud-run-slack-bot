@@ -15,28 +15,25 @@ import (
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 )
 
-func TestSlackRequestVerification(t *testing.T) {
+func TestSlackEventsVerification(t *testing.T) {
 	signingSecret := "test_secret"
 	handler := &slackinternal.SlackEventHandler{}
 	svc := NewCloudRunSlackBotHttp("test-channel", &slack.Client{}, handler, signingSecret)
 
 	tests := []struct {
 		name           string
-		endpoint      string
 		body          string
 		validSignature bool
 		wantStatus    int
 	}{
 		{
 			name:      "valid signature events",
-			endpoint: "/slack/events",
 			body:     `{"type":"url_verification","challenge":"test"}`,
 			validSignature: true,
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:      "invalid signature events",
-			endpoint: "/slack/events",
 			body:     `{"type":"url_verification","challenge":"test"}`,
 			validSignature: false,
 			wantStatus: http.StatusUnauthorized,
@@ -45,7 +42,7 @@ func TestSlackRequestVerification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("POST", tt.endpoint, bytes.NewBufferString(tt.body))
+			req := httptest.NewRequest("POST", "/slack/events", bytes.NewBufferString(tt.body))
 			timestamp := fmt.Sprintf("%d", time.Now().Unix())
 			req.Header.Set("X-Slack-Request-Timestamp", timestamp)
 
@@ -60,13 +57,8 @@ func TestSlackRequestVerification(t *testing.T) {
 			}
 
 			w := httptest.NewRecorder()
-			if tt.endpoint == "/slack/events" {
-				handler := svc.SlackEventsHandler()
-				handler(w, req)
-			} else {
-				handler := svc.SlackInteractionHandler()
-				handler(w, req)
-			}
+			handler := svc.SlackEventsHandler()
+			handler(w, req)
 
 			if w.Code != tt.wantStatus {
 				t.Errorf("got status %d, want %d", w.Code, tt.wantStatus)
