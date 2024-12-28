@@ -68,11 +68,18 @@ func main() {
 
 	sClient := slack.New(os.Getenv("SLACK_BOT_TOKEN"), ops...)
 	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, slackinternal.WithLogger(logger), slackinternal.WithTmpDir(os.Getenv("TMP_DIR")))
+
+	signingSecret := os.Getenv("SLACK_SIGNING_SECRET")
+	if signingSecret == "" && os.Getenv("SLACK_APP_MODE") != "socket" {
+		logger.Fatal("SLACK_SIGNING_SECRET env var is required for HTTP mode")
+	}
+
 	svc := cloudrunslackbot.NewCloudRunSlackBotService(
 		sClient,
 		os.Getenv("SLACK_CHANNEL"),
 		os.Getenv("SLACK_APP_MODE"),
 		handler,
+		signingSecret,
 	)
 	svc.Run()
 }

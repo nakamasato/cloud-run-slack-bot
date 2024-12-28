@@ -16,10 +16,11 @@ import (
 type ServiceOption func(*CloudRunSlackBotHttp)
 
 type CloudRunSlackBotHttp struct {
-	client       *slack.Client
-	slackHandler *slackinternal.SlackEventHandler
-	auditHandler *pubsub.CloudRunAuditLogHandler
-	logger       *zap.Logger
+	client        *slack.Client
+	slackHandler  *slackinternal.SlackEventHandler
+	auditHandler  *pubsub.CloudRunAuditLogHandler
+	logger        *zap.Logger
+	signingSecret string
 }
 
 func WithLogger(l *zap.Logger) ServiceOption {
@@ -37,6 +38,12 @@ func WithClient(c *slack.Client) ServiceOption {
 func WithSlackHandler(h *slackinternal.SlackEventHandler) ServiceOption {
 	return func(s *CloudRunSlackBotHttp) {
 		s.slackHandler = h
+	}
+}
+
+func WithSigningSecret(secret string) ServiceOption {
+	return func(s *CloudRunSlackBotHttp) {
+		s.signingSecret = secret
 	}
 }
 
@@ -67,7 +74,7 @@ func (svc *CloudRunSlackBotHttp) Run() {
 	}
 }
 
-// SlackEventsHandler is http.HandlerFunc for Slack Events API
+// SlackEventsHandler handles events from Slack
 func (svc *CloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -75,6 +82,26 @@ func (svc *CloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFunc {
 			svc.logger.Error("failed to read request body", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		}
+
+		// Verify the signing secret if provided
+		if svc.signingSecret != "" {
+			sv, err := slack.NewSecretsVerifier(r.Header, svc.signingSecret)
+			if err != nil {
+				svc.logger.Error("failed to create secrets verifier", zap.Error(err))
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if _, err := sv.Write(body); err != nil {
+				svc.logger.Error("failed to write body to verifier", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if err := sv.Ensure(); err != nil {
+				svc.logger.Error("failed to verify request signature", zap.Error(err))
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 		}
 
 		eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())

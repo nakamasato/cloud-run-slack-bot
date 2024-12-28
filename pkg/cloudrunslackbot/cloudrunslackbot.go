@@ -9,9 +9,9 @@ type CloudRunSlackBotService interface {
 	Run()
 }
 
-func NewCloudRunSlackBotService(sClient *slack.Client, channel, slackMode string, handler *slackinternal.SlackEventHandler, opts ...ServiceOption) CloudRunSlackBotService {
+func NewCloudRunSlackBotService(sClient *slack.Client, channel, slackMode string, handler *slackinternal.SlackEventHandler, signingSecret string) CloudRunSlackBotService {
 	if slackMode == "socket" {
 		return NewCloudRunSlackBotSocket(channel, sClient, handler)
 	}
-	return NewCloudRunSlackBotHttp(channel, sClient, handler, opts...)
+	return NewCloudRunSlackBotHttp(channel, sClient, handler, WithSigningSecret(signingSecret))
 }
