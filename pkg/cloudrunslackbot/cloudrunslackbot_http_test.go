@@ -18,7 +18,7 @@ import (
 func TestSlackEventsVerification(t *testing.T) {
 	signingSecret := "test_secret"
 	handler := &slackinternal.SlackEventHandler{}
-	svc := NewCloudRunSlackBotHttp("test-channel", &slack.Client{}, handler, signingSecret)
+	svc := NewCloudRunSlackBotHttp("test-channel", &slack.Client{}, handler, WithSigningSecret(signingSecret))
 
 	tests := []struct {
 		name           string

@@ -12,9 +12,12 @@ import (
 )
 
 var predefinedColorMap = map[string]drawing.Color{
-	"2xx": chart.ColorAlternateGreen,
-	"4xx": chart.ColorAlternateYellow,
-	"5xx": chart.ColorRed,
+	"2xx":                 chart.ColorAlternateGreen,
+	"4xx":                 chart.ColorAlternateYellow,
+	"5xx":                 chart.ColorRed,
+	"ALIGN_PERCENTILE_99": chart.ColorBlue,
+	"ALIGN_PERCENTILE_90": chart.ColorCyan,
+	"ALIGN_PERCENTILE_50": chart.ColorOrange,
 }
 
 // Visualize draw a line chart and export to a file.
@@ -76,7 +79,7 @@ func makeChartTimeSeries(i int, name string, startTime, endTime time.Time, inter
 		cTs.XValues = append(cTs.XValues, t)
 		cTs.YValues = append(cTs.YValues, counter[t])
 	}
-	log.Printf("name: %s\nXValues:%d, YValues:%d", name, len(cTs.XValues), len(cTs.YValues))
+	log.Printf("name: %s, XValues:%d, YValues:%d", name, len(cTs.XValues), len(cTs.YValues))
 	return &cTs
 }
 

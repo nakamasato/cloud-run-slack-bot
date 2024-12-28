@@ -13,5 +13,5 @@ func NewCloudRunSlackBotService(sClient *slack.Client, channel, slackMode string
 	if slackMode == "socket" {
 		return NewCloudRunSlackBotSocket(channel, sClient, handler)
 	}
-	return NewCloudRunSlackBotHttp(channel, sClient, handler, signingSecret)
+	return NewCloudRunSlackBotHttp(channel, sClient, handler, WithSigningSecret(signingSecret))
 }
