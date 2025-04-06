@@ -28,7 +28,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer mClient.Close()
+	defer func() {
+		if err := mClient.Close(); err != nil {
+			log.Printf("Failed to close monitoring client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	rClient, err := cloudrun.NewClient(ctx, project, region)

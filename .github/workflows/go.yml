@@ -37,7 +37,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v1.64.8
+          version: v2.0.2
 
   build:
     needs:
@@ -53,22 +53,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set image tag
+        id: set_image_tag
+        uses: nakamasato/github-actions/set-image-tag@1.9.0
+
       - name: Set config
         id: set_config
         run: |
-          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
-            LATEST_SHA="${{ github.event.pull_request.head.sha }}"
-            TAGS="pr-${{ github.event.number }}-${LATEST_SHA:0:7}"
-            REPO=cloud-run-slack-bot-dev
-          elif [ "$GITHUB_EVENT_NAME" == "push" ]; then
-            TAGS="${GITHUB_SHA:0:7}"
-            REPO=cloud-run-slack-bot-dev
-          elif [ "$GITHUB_EVENT_NAME" == "release" ]; then
-            TAGS="$GITHUB_REF_NAME"
-            REPO=cloud-run-slack-bot
-          fi
-          echo "TAGS=$TAGS" >> "$GITHUB_OUTPUT"
-          echo "REPO=$REPO" >> "$GITHUB_OUTPUT"
+          echo "REPO=${{ github.event_name == 'release' && 'cloud-run-slack-bot' || 'cloud-run-slack-bot-dev' }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up ko
         uses: ko-build/setup-ko@v0.8
@@ -84,4 +76,4 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build
-        run: ko build . --tags="${{ steps.set_config.outputs.TAGS }},latest" --bare
+        run: ko build . --tags="${{ steps.set_image_tag.outputs.tag }},latest" --bare
