@@ -19,11 +19,11 @@ type CloudRunSlackBotHttp struct {
 	signingSecret string
 }
 
-func NewCloudRunSlackBotHttp(channels map[string]string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, signingSecret string) *CloudRunSlackBotHttp {
+func NewCloudRunSlackBotHttp(channels map[string]string, defaultChannel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, signingSecret string) *CloudRunSlackBotHttp {
 	return &CloudRunSlackBotHttp{
 		client:        sClient,
 		slackHandler:  handler,
-		auditHandler:  pubsub.NewCloudRunAuditLogHandler(channels, sClient),
+		auditHandler:  pubsub.NewCloudRunAuditLogHandler(channels, defaultChannel, sClient),
 		signingSecret: signingSecret,
 	}
 }

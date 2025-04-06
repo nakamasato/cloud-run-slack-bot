@@ -82,14 +82,16 @@ type CloudRunAuditLog struct {
 
 type CloudRunAuditLogHandler struct {
 	// Slack Client
-	client   internalslack.Client
-	channels map[string]string // Maps service names to Slack channel names
+	client         internalslack.Client
+	channels       map[string]string // Maps service names to Slack channel names
+	defaultChannel string            // Default channel for services not in the mapping
 }
 
-func NewCloudRunAuditLogHandler(channels map[string]string, client internalslack.Client) *CloudRunAuditLogHandler {
+func NewCloudRunAuditLogHandler(channels map[string]string, defaultChannel string, client internalslack.Client) *CloudRunAuditLogHandler {
 	return &CloudRunAuditLogHandler{
-		client:   client,
-		channels: channels,
+		client:         client,
+		channels:       channels,
+		defaultChannel: defaultChannel,
 	}
 }
 
@@ -127,82 +129,87 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 
 	log.Printf("Method Name: %s, Request Name: %s", methodName, serviceName)
 
-	if channel, ok := h.channels[serviceName]; ok {
-		fields := []slack.AttachmentField{}
-		if resourceName := logEntry.ProtoPayload.ResourceName; resourceName != "" {
-			parts := strings.Split(resourceName, "/")
-			shortName := parts[len(parts)-1]
-
-			fields = append(fields, slack.AttachmentField{
-				Title: "ResourceName",
-				Value: shortName,
-				Short: true,
-			})
-		}
-		if methodName != "" {
-			fields = append(fields, slack.AttachmentField{
-				Title: "Method",
-				Value: methodName,
-				Short: true,
-			})
-		}
-
-		if latestCreatedRevision != "" {
-			fields = append(fields, slack.AttachmentField{
-				Title: "Latest Created Revision",
-				Value: fmt.Sprintf("`%s` (%s)", latestCreatedRevision, boolEmoji[latestReadyRevision == latestCreatedRevision]),
-				Short: true,
-			})
-		}
-
-		revisions := []string{}
-		for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
-			revisions = append(revisions, fmt.Sprintf("- `%s` (%d%%) (latest: %s)", traffic.RevisionName, traffic.Percent, boolEmoji[traffic.LatestRevision]))
-		}
-		if len(revisions) > 0 {
-			fields = append(fields, slack.AttachmentField{
-				Title: "Traffic Revisions",
-				Value: strings.Join(revisions, "\n"),
-			})
-		}
-		if logEntry.Severity == "ERROR" {
-			fields = append(fields, slack.AttachmentField{
-				Title: "Error",
-				Value: fmt.Sprintf("Code: %d\nMessage: %s", logEntry.ProtoPayload.Status.Code, logEntry.ProtoPayload.Status.Message),
-			})
-		}
-
-		fields = append(fields, slack.AttachmentField{
-			Title: "Severity",
-			Value: logEntry.Severity,
-			Short: true,
-		})
-
-		attachment := slack.Attachment{
-			Text:   serviceName,
-			Fields: fields,
-			Color:  getColor(logEntry.Severity),
-		}
-
-		text := ""
-		if logEntry.ProtoPayload.Status.Message != "" {
-			text = logEntry.ProtoPayload.Status.Message
-		} else {
-			text = fmt.Sprintf("`%s` has modified Cloud Run service `%s` (generation :%d).", lastModifier, serviceName, generation)
-		}
-
-		_, _, err = h.client.PostMessage(channel,
-			slack.MsgOptionText(text, false),
-			slack.MsgOptionAttachments(attachment),
-		)
-		if err != nil {
-			log.Printf("slack.PostMessage: %v", err)
-			http.Error(w, "Failed to post Slack message", http.StatusInternalServerError)
+	// Get the channel for this service, or use the default channel
+	channel, ok := h.channels[serviceName]
+	if !ok {
+		if h.defaultChannel == "" {
+			log.Printf("No channel configured for service %s and no default channel set", serviceName)
+			http.Error(w, "No channel configured for service", http.StatusBadRequest)
 			return
 		}
+		channel = h.defaultChannel
+	}
+
+	fields := []slack.AttachmentField{}
+	if resourceName := logEntry.ProtoPayload.ResourceName; resourceName != "" {
+		parts := strings.Split(resourceName, "/")
+		shortName := parts[len(parts)-1]
+
+		fields = append(fields, slack.AttachmentField{
+			Title: "ResourceName",
+			Value: shortName,
+			Short: true,
+		})
+	}
+	if methodName != "" {
+		fields = append(fields, slack.AttachmentField{
+			Title: "Method",
+			Value: methodName,
+			Short: true,
+		})
+	}
+
+	if latestCreatedRevision != "" {
+		fields = append(fields, slack.AttachmentField{
+			Title: "Latest Created Revision",
+			Value: fmt.Sprintf("`%s` (%s)", latestCreatedRevision, boolEmoji[latestReadyRevision == latestCreatedRevision]),
+			Short: true,
+		})
+	}
+
+	revisions := []string{}
+	for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
+		revisions = append(revisions, fmt.Sprintf("- `%s` (%d%%) (latest: %s)", traffic.RevisionName, traffic.Percent, boolEmoji[traffic.LatestRevision]))
+	}
+	if len(revisions) > 0 {
+		fields = append(fields, slack.AttachmentField{
+			Title: "Traffic Revisions",
+			Value: strings.Join(revisions, "\n"),
+		})
+	}
+	if logEntry.Severity == "ERROR" {
+		fields = append(fields, slack.AttachmentField{
+			Title: "Error",
+			Value: fmt.Sprintf("Code: %d\nMessage: %s", logEntry.ProtoPayload.Status.Code, logEntry.ProtoPayload.Status.Message),
+		})
+	}
+
+	fields = append(fields, slack.AttachmentField{
+		Title: "Severity",
+		Value: logEntry.Severity,
+		Short: true,
+	})
+
+	attachment := slack.Attachment{
+		Text:   serviceName,
+		Fields: fields,
+		Color:  getColor(logEntry.Severity),
+	}
+
+	text := ""
+	if logEntry.ProtoPayload.Status.Message != "" {
+		text = logEntry.ProtoPayload.Status.Message
 	} else {
-		log.Printf("Slack channel not found for service: %s", serviceName)
-		http.Error(w, "Slack channel not found", http.StatusBadRequest)
+		text = fmt.Sprintf("`%s` has modified Cloud Run service `%s` (generation :%d).", lastModifier, serviceName, generation)
+	}
+
+	_, _, err = h.client.PostMessage(channel,
+		slack.MsgOptionText(text, false),
+		slack.MsgOptionAttachments(attachment),
+	)
+	if err != nil {
+		log.Printf("slack.PostMessage: %v", err)
+		http.Error(w, "Failed to post Slack message", http.StatusInternalServerError)
 		return
 	}
 }

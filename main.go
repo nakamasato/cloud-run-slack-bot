@@ -63,9 +63,12 @@ func main() {
 		}
 	}
 
+	defaultChannel := os.Getenv("SLACK_CHANNEL")
+
 	svc := cloudrunslackbot.NewCloudRunSlackBotService(
 		sClient,
 		serviceChannelMapping,
+		defaultChannel,
 		os.Getenv("SLACK_APP_MODE"),
 		handler,
 		signingSecret,

@@ -31,7 +31,7 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 1. `SLACK_APP_TOKEN` (optional): Slack oauth token (required for `SLACK_APP_MODE=socket`)
 1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
 1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
-1. `SLACK_CHANNEL` (optional): Slack Channel ID to receive notification for Cloud Run audit logs
+1. `SLACK_CHANNEL`: Default Slack Channel ID to receive notification for Cloud Run audit logs (used when service is not specified in `SERVICE_CHANNEL_MAPPING`)
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
 
 ### Deploy
@@ -67,7 +67,7 @@ Deploy to Cloud Run
 ```
 gcloud run deploy cloud-run-slack-bot \
     --set-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest" \
-    --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp,SERVICE_CHANNEL_MAPPING=service1:channel1,service2:channel2" \
+    --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp,SLACK_CHANNEL=general,SERVICE_CHANNEL_MAPPING=service1:channel1,service2:channel2" \
     --image nakamasato/cloud-run-slack-bot:0.0.2 \
     --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
     --project "$PROJECT" --region "$REGION"

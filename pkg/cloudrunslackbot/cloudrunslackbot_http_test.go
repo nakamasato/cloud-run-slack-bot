@@ -19,7 +19,8 @@ func TestSlackEventsVerification(t *testing.T) {
 	signingSecret := "test_secret"
 	handler := &slackinternal.SlackEventHandler{}
 	channels := map[string]string{"test-service": "test-channel"}
-	svc := NewCloudRunSlackBotHttp(channels, &slack.Client{}, handler, signingSecret)
+	defaultChannel := "default-channel"
+	svc := NewCloudRunSlackBotHttp(channels, defaultChannel, &slack.Client{}, handler, signingSecret)
 
 	tests := []struct {
 		name           string
