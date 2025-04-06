@@ -51,7 +51,9 @@ func TestSlackEventsVerification(t *testing.T) {
 			if tt.validSignature {
 				// Generate valid signature
 				hash := hmac.New(sha256.New, []byte(signingSecret))
-				hash.Write([]byte(fmt.Sprintf("v0:%s:%s", timestamp, tt.body)))
+				if _, err := fmt.Fprintf(hash, "v0:%s:%s", timestamp, tt.body); err != nil {
+					t.Fatalf("Failed to write to hash: %v", err)
+				}
 				sig := hex.EncodeToString(hash.Sum(nil))
 				req.Header.Set("X-Slack-Signature", "v0="+sig)
 			} else {

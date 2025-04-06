@@ -44,7 +44,11 @@ func Visualize(title, imgFile string, startTime, endTime time.Time, interval tim
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 	err = graph.Render(chart.PNG, f)
 	if err != nil {
 		return 0, err
@@ -116,6 +120,10 @@ func VisualizeSample(imgFile string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("Failed to close file: %v", err)
+		}
+	}()
 	return graph.Render(chart.PNG, f)
 }
