@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrunslackbot"
@@ -48,9 +49,23 @@ func main() {
 		log.Fatal("SLACK_SIGNING_SECRET env var is required for HTTP mode")
 	}
 
+	// Parse service-channel mapping from environment variable
+	// Format: service1:channel1,service2:channel2
+	serviceChannelMapping := make(map[string]string)
+	serviceChannelStr := os.Getenv("SERVICE_CHANNEL_MAPPING")
+	if serviceChannelStr != "" {
+		pairs := strings.Split(serviceChannelStr, ",")
+		for _, pair := range pairs {
+			parts := strings.Split(pair, ":")
+			if len(parts) == 2 {
+				serviceChannelMapping[parts[0]] = parts[1]
+			}
+		}
+	}
+
 	svc := cloudrunslackbot.NewCloudRunSlackBotService(
 		sClient,
-		os.Getenv("SLACK_CHANNEL"),
+		serviceChannelMapping,
 		os.Getenv("SLACK_APP_MODE"),
 		handler,
 		signingSecret,

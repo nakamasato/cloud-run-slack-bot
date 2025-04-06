@@ -23,6 +23,9 @@ Supported logs: `Admin Activity logs` (enabled by default)
 
 [Terraform](terraform.md)
 
+## Environment Variables
+
+1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
 
 ## Cases
 
