@@ -82,14 +82,16 @@ type CloudRunAuditLog struct {
 
 type CloudRunAuditLogHandler struct {
 	// Slack Client
-	client  internalslack.Client
-	channel string
+	client         internalslack.Client
+	channels       map[string]string // Maps service names to Slack channel names
+	defaultChannel string            // Default channel for services not in the mapping
 }
 
-func NewCloudRunAuditLogHandler(channel string, client internalslack.Client) *CloudRunAuditLogHandler {
+func NewCloudRunAuditLogHandler(channels map[string]string, defaultChannel string, client internalslack.Client) *CloudRunAuditLogHandler {
 	return &CloudRunAuditLogHandler{
-		client:  client,
-		channel: channel,
+		client:         client,
+		channels:       channels,
+		defaultChannel: defaultChannel,
 	}
 }
 
@@ -127,9 +129,15 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 
 	log.Printf("Method Name: %s, Request Name: %s", methodName, serviceName)
 
-	if h.channel == "" {
-		log.Println("Slack channel not set. Please set SLACK_CHANNEL environment variable if you want to post messages to Slack.")
-		return
+	// Get the channel for this service, or use the default channel
+	channel, ok := h.channels[serviceName]
+	if !ok {
+		if h.defaultChannel == "" {
+			log.Printf("No channel configured for service %s and no default channel set", serviceName)
+			http.Error(w, "No channel configured for service", http.StatusBadRequest)
+			return
+		}
+		channel = h.defaultChannel
 	}
 
 	fields := []slack.AttachmentField{}
@@ -195,7 +203,7 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		text = fmt.Sprintf("`%s` has modified Cloud Run service `%s` (generation :%d).", lastModifier, serviceName, generation)
 	}
 
-	_, _, err = h.client.PostMessage(h.channel,
+	_, _, err = h.client.PostMessage(channel,
 		slack.MsgOptionText(text, false),
 		slack.MsgOptionAttachments(attachment),
 	)

@@ -11,32 +11,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/slack-go/slack"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
+	"github.com/slack-go/slack"
 )
 
 func TestSlackEventsVerification(t *testing.T) {
 	signingSecret := "test_secret"
 	handler := &slackinternal.SlackEventHandler{}
-	svc := NewCloudRunSlackBotHttp("test-channel", &slack.Client{}, handler, signingSecret)
+	channels := map[string]string{"test-service": "test-channel"}
+	defaultChannel := "default-channel"
+	svc := NewCloudRunSlackBotHttp(channels, defaultChannel, &slack.Client{}, handler, signingSecret)
 
 	tests := []struct {
 		name           string
-		body          string
+		body           string
 		validSignature bool
-		wantStatus    int
+		wantStatus     int
 	}{
 		{
-			name:      "valid signature events",
-			body:     `{"type":"url_verification","challenge":"test"}`,
+			name:           "valid signature events",
+			body:           `{"type":"url_verification","challenge":"test"}`,
 			validSignature: true,
-			wantStatus: http.StatusOK,
+			wantStatus:     http.StatusOK,
 		},
 		{
-			name:      "invalid signature events",
-			body:     `{"type":"url_verification","challenge":"test"}`,
+			name:           "invalid signature events",
+			body:           `{"type":"url_verification","challenge":"test"}`,
 			validSignature: false,
-			wantStatus: http.StatusUnauthorized,
+			wantStatus:     http.StatusUnauthorized,
 		},
 	}
 

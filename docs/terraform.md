@@ -22,6 +22,10 @@ variable "region" {
 variable "channel" {
   description = "Slack Channel ID"
 }
+
+variable "service_channel_mapping" {
+  description = "Mapping of service names to Slack channel IDs (format: service1:channel1,service2:channel2)"
+}
 ```
 
 `main.tf`
@@ -29,11 +33,12 @@ variable "channel" {
 ```hcl
 locals {
   cloud_run_slack_bot_envs = {
-    PROJECT        = var.project
-    REGION         = var.region
-    SLACK_APP_MODE = "http"
-    SLACK_CHANNEL  = var.channel
-    TMP_DIR        = "/tmp"
+    PROJECT              = var.project
+    REGION               = var.region
+    SLACK_APP_MODE       = "http"
+    SLACK_CHANNEL        = var.channel
+    SERVICE_CHANNEL_MAPPING = var.service_channel_mapping
+    TMP_DIR             = "/tmp"
   }
   cloud_run_slack_bot_secrets = {
     SLACK_BOT_TOKEN      = google_secret_manager_secret.slack_bot_token_cloud_run_slack_bot.secret_id
