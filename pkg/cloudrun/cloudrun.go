@@ -3,17 +3,16 @@ package cloudrun
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
-	"google.golang.org/api/run/v2"
+	"google.golang.org/api/run/v1"
 )
 
 type Client struct {
-	project                      string
-	region                       string
-	projectLocationServiceClient *run.ProjectsLocationsServicesService
+	project string
+	region  string
+	nsSvc   *run.NamespacesServicesService
 }
 
 type CloudRunService struct {
@@ -57,54 +56,57 @@ func (c *Client) GetServiceNameFromFullname(fullname string) string {
 }
 
 func NewClient(ctx context.Context, project, region string) (*Client, error) {
-	runService, err := run.NewService(ctx)
+	runSvc, err := run.NewService(ctx)
+	runSvc.BasePath = fmt.Sprintf("https://%s-run.googleapis.com/", region)
 	if err != nil {
 		return nil, err
 	}
-	plSvc := run.NewProjectsLocationsServicesService(runService)
+	nsSvc := run.NewNamespacesServicesService(runSvc)
 	return &Client{
-		project:                      project,
-		region:                       region,
-		projectLocationServiceClient: plSvc,
+		project: project,
+		region:  region,
+		nsSvc:   nsSvc,
 	}, nil
 }
 
 func (c *Client) ListServices(ctx context.Context) ([]string, error) {
-	projLoc := c.getProjectLocation()
-	log.Printf("Listing services in %s\n", projLoc)
-	res, err := c.projectLocationServiceClient.List(projLoc).Context(ctx).Do()
+	// The parent from where the resources should be listed. In Cloud Run, it may be one of the following:
+	// * `{project_id_or_number}`
+	// * `namespaces/{project_id_or_number}`
+	// * `namespaces/{project_id_or_number}/services`
+	// * `projects/{project_id_or_number}/locations/{region}`
+	// * `projects/{project_id_or_number}/regions/{region}`.
+	res, err := c.nsSvc.List(fmt.Sprintf("namespaces/%s", c.project)).Context(ctx).Do()
 	if err != nil {
 		return nil, err
 	}
-	var services []string
-	for _, s := range res.Services {
-		svcName := c.GetServiceNameFromFullname(s.Name)
-		services = append(services, svcName)
+	var svcNames []string
+	for _, i := range res.Items {
+		svcName := c.GetServiceNameFromFullname(i.Metadata.Name)
+		svcNames = append(svcNames, svcName)
 	}
-	return services, nil
+	return svcNames, nil
 }
 
 func (c *Client) GetService(ctx context.Context, serviceName string) (*CloudRunService, error) {
-	projLoc := c.getProjectLocation()
-	res, err := c.projectLocationServiceClient.Get(fmt.Sprintf("%s/services/%s", projLoc, serviceName)).Context(ctx).Do()
+	svc, err := c.nsSvc.Get(fmt.Sprintf("namespaces/%s/services/%s", c.project, serviceName)).Context(ctx).Do()
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Service: %+v\n", res)
 
-	updateTime, err := time.Parse(time.RFC3339Nano, res.UpdateTime) // 2024-04-27T00:56:09.929299Z
+	updateTime, err := time.Parse(time.RFC3339Nano, svc.Status.Conditions[0].LastTransitionTime) // 2024-04-27T00:56:09.929299Z
 	if err != nil {
 		return nil, err
 	}
 
 	return &CloudRunService{
-		Name:           c.GetServiceNameFromFullname(res.Name),
+		Name:           c.GetServiceNameFromFullname(svc.Metadata.Name),
 		Region:         c.region,
 		Project:        c.project,
-		Image:          res.Template.Containers[0].Image,
-		ResourceLimits: res.Template.Containers[0].Resources.Limits,
-		LastModifier:   res.LastModifier,
+		Image:          svc.Spec.Template.Spec.Containers[0].Image, // only first container
+		ResourceLimits: svc.Spec.Template.Spec.Containers[0].Resources.Limits,
+		LastModifier:   svc.Metadata.Annotations["serving.knative.dev/lastModifier"],
 		UpdateTime:     updateTime,
-		LatestRevision: strings.TrimPrefix(res.LatestCreatedRevision, fmt.Sprintf("%s/services/%s/revisions/", projLoc, serviceName)),
+		LatestRevision: svc.Status.LatestCreatedRevisionName,
 	}, nil
 }
