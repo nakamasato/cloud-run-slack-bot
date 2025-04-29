@@ -6,12 +6,12 @@ require (
 	cloud.google.com/go/monitoring v1.24.2
 	github.com/slack-go/slack v0.16.0
 	github.com/wcharczuk/go-chart/v2 v2.1.2
-	google.golang.org/api v0.230.0
+	google.golang.org/api v0.231.0
 	google.golang.org/protobuf v1.36.6
 )
 
 require (
-	cloud.google.com/go/auth v0.16.0 // indirect
+	cloud.google.com/go/auth v0.16.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -39,6 +39,6 @@ require (
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250414145226-207652e42e2e // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250414145226-207652e42e2e // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250425173222-7b384671a197 // indirect
 	google.golang.org/grpc v1.72.0 // indirect
 )
