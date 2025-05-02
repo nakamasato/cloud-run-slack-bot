@@ -53,3 +53,28 @@ func TestCloudRunService_GetYamlUrl(t *testing.T) {
 		})
 	}
 }
+
+func TestCloudRunJob_GetYamlUrl(t *testing.T) {
+	tests := []struct {
+		name string
+		c    *CloudRunJob
+		want string
+	}{
+		{
+			name: "test",
+			c: &CloudRunJob{
+				Name:    "test-job",
+				Region:  "asia-northeast1",
+				Project: "project",
+			},
+			want: "https://console.cloud.google.com/run/jobs/details/asia-northeast1/test-job/yaml?project=project",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.c.GetYamlUrl(); got != tt.want {
+				t.Errorf("CloudRunJob.GetYamlUrl() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

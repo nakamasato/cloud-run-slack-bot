@@ -1,6 +1,6 @@
 # Cloud Run Slack Bot
 
-This is a simple Slack bot running on Cloud Run with which you can interact with Cloud Run services.
+This is a simple Slack bot running on Cloud Run with which you can interact with Cloud Run services and jobs.
 
 <img src="docs/preview.gif" alt="preview" width="400"/>
 
@@ -10,9 +10,10 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 
 ## Features
 
-1. Interact with Cloud Run service on Slack.
+1. Interact with Cloud Run resources on Slack.
     1. Get metrics of Cloud Run service.
     1. Describe Cloud Run service.
+    1. Describe Cloud Run job.
 1. Receive notification for Cloud Run audit logs on Slack.
 
 ## Cloud Run
