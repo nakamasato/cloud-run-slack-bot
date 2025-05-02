@@ -2,21 +2,26 @@
 
 ## Overview
 
-`cloud-run-slack-bot` also supports to send audit logs to Slack.
+`cloud-run-slack-bot` also supports sending audit logs for both Cloud Run services and jobs to Slack.
 
 ![](auditing.png)
 
-Supported logs: `Admin Activity logs` (enabled by default)
+### Supported Logs
 
+`Admin Activity logs` (enabled by default) are supported for the following operations:
+
+**Cloud Run Services**
 1. `Services.CreateService`
 1. `Services.ReplaceService`
 1. `Services.DeleteService`
 1. `Revisions.DeleteRevision`
+1. `Services.SetIamPolicy`
+
+**Cloud Run Jobs**
 1. `Jobs.CreateJob`
 1. `Jobs.ReplaceJob`
 1. `Jobs.DeleteJob`
 1. `Executions.DeleteExecution`
-1. `Services.SetIamPolicy`
 1. `Jobs.SetIamPolicy`
 
 ## Setup
@@ -25,7 +30,7 @@ Supported logs: `Admin Activity logs` (enabled by default)
 
 ## Environment Variables
 
-1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
+1. `SERVICE_CHANNEL_MAPPING`: Mapping of service and job names to Slack channel IDs (format: `service1:channel1,job1:channel2,service2:channel3`)
 
 ## Cases
 
