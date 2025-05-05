@@ -129,58 +129,56 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	}
 
 	methodName := logEntry.ProtoPayload.MethodName
-	
-	// Determine if this is a job or service based on the methodName
-	isJob := strings.Contains(methodName, "Jobs.") || strings.Contains(methodName, "Executions.")
-	
-	var resourceName string
-	if isJob {
-		resourceName = logEntry.Resource.Labels["job_name"]
-		if resourceName == "" {
-			// Check execution logs which may have service_name instead
-			resourceName = logEntry.Resource.Labels["service_name"]
-		}
+
+	var jobOrSvcName string // job_name or service_name
+	var resourceType string // job or service
+	jobName := logEntry.Resource.Labels["job_name"]
+	serviceName := logEntry.Resource.Labels["service_name"]
+	if jobName != "" {
+		jobOrSvcName = jobName
+		resourceType = "job"
 	} else {
-		resourceName = logEntry.Resource.Labels["service_name"]
+		jobOrSvcName = serviceName
+		resourceType = "service"
 	}
-	
+
 	lastModifier := logEntry.ProtoPayload.Response.Metadata.Annotations.LastModifier
 	generation := logEntry.ProtoPayload.Response.Metadata.Generation
-	
+
 	// Service specific fields
 	latestReadyRevision := logEntry.ProtoPayload.Response.Status.LatestReadyRevisionName
 	latestCreatedRevision := logEntry.ProtoPayload.Response.Status.LatestCreatedRevisionName
-	
+
 	// Job specific fields
 	latestCreatedExecution := logEntry.ProtoPayload.Response.Status.LatestCreatedExecutionName
-	
-	log.Printf("Method Name: %s, Resource Name: %s, Is Job: %t", methodName, resourceName, isJob)
+
+	log.Printf("Method Name: %s, Resource Name: %s, Resource Type: %s", methodName, jobOrSvcName, resourceType)
 
 	// Get the channel for this service/job, or use the default channel
-	channel, ok := h.channels[resourceName]
+	channel, ok := h.channels[jobOrSvcName]
 	if !ok {
-		if h.defaultChannel == "" {
-			resourceType := "service"
-			if isJob {
-				resourceType = "job"
-			}
-			log.Printf("No channel configured for %s %s and no default channel set", resourceType, resourceName)
-			http.Error(w, fmt.Sprintf("No channel configured for %s", resourceType), http.StatusBadRequest)
-			return
-		}
 		channel = h.defaultChannel
 	}
+	log.Printf("Set Channel to '%s' for '%s'(%s)", channel, jobOrSvcName, resourceType)
 
-	fields := []slack.AttachmentField{}
+	fields := []slack.AttachmentField{
+		{
+			Title: resourceType,
+			Value: jobOrSvcName,
+			Short: true,
+		},
+	}
 	if resourceName := logEntry.ProtoPayload.ResourceName; resourceName != "" {
 		parts := strings.Split(resourceName, "/")
 		shortName := parts[len(parts)-1]
 
-		fields = append(fields, slack.AttachmentField{
-			Title: "ResourceName",
-			Value: shortName,
-			Short: true,
-		})
+		if shortName != jobOrSvcName { // only when short name is different from jobOrSvcName e.g. revision name, execution name
+			fields = append(fields, slack.AttachmentField{
+				Title: "ResourceName",
+				Value: shortName,
+				Short: true,
+			})
+		}
 	}
 	if methodName != "" {
 		fields = append(fields, slack.AttachmentField{
@@ -190,7 +188,7 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		})
 	}
 
-	if isJob {
+	if resourceType == "job" {
 		// Job-specific fields
 		if latestCreatedExecution != "" {
 			fields = append(fields, slack.AttachmentField{
@@ -199,7 +197,7 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 				Short: true,
 			})
 		}
-		
+
 		// Add job conditions if available
 		conditions := []string{}
 		for _, condition := range logEntry.ProtoPayload.Response.Status.Conditions {
@@ -245,25 +243,22 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		Short: true,
 	})
 
+	text := ""
+	if logEntry.ProtoPayload.Status.Message != "" {
+		text = logEntry.ProtoPayload.Status.Message
+	} else if lastModifier != "" {
+		text = fmt.Sprintf("Cloud Run %s `%s` has been modified by `%s` (generation: %d).", resourceType, jobOrSvcName, lastModifier, generation)
+	} else {
+		text = fmt.Sprintf("Cloud Run %s `%s` has been updated (generation: %d).", resourceType, jobOrSvcName, generation)
+	}
+
 	attachment := slack.Attachment{
-		Text:   resourceName,
+		Text:   text,
 		Fields: fields,
 		Color:  getColor(logEntry.Severity),
 	}
 
-	text := ""
-	if logEntry.ProtoPayload.Status.Message != "" {
-		text = logEntry.ProtoPayload.Status.Message
-	} else {
-		resourceType := "service"
-		if isJob {
-			resourceType = "job"
-		}
-		text = fmt.Sprintf("`%s` has modified Cloud Run %s `%s` (generation :%d).", lastModifier, resourceType, resourceName, generation)
-	}
-
 	_, _, err = h.client.PostMessage(channel,
-		slack.MsgOptionText(text, false),
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
