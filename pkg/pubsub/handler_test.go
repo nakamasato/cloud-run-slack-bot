@@ -46,7 +46,7 @@ func TestCloudRunAuditLogHandler(t *testing.T) {
 			methodName:     "google.cloud.run.v1.Services.ReplaceService",
 			channels:       map[string]string{"test-service": "test-channel"},
 			defaultChannel: "",
-			wantStatus:     http.StatusBadRequest,
+			wantStatus:     http.StatusOK, // no error but no message is sent to slack
 		},
 		{
 			name:           "job with specific channel",
@@ -73,7 +73,7 @@ func TestCloudRunAuditLogHandler(t *testing.T) {
 			methodName:     "google.cloud.run.v1.Jobs.ReplaceJob",
 			channels:       map[string]string{"test-job": "test-channel"},
 			defaultChannel: "",
-			wantStatus:     http.StatusBadRequest,
+			wantStatus:     http.StatusOK, // no error but no message is sent to slack
 		},
 	}
 
@@ -107,14 +107,14 @@ func TestCloudRunAuditLogHandler(t *testing.T) {
 								}
 							}
 						}
-					}`, 
-					tt.resourceType, tt.resourceName, 
+					}`,
+					tt.resourceType, tt.resourceName,
 					func() string {
 						if tt.resourceType == "job" {
 							return "cloud_run_job"
 						}
 						return "cloud_run_revision"
-					}(), 
+					}(),
 					tt.methodName, tt.resourceType, tt.resourceName)),
 					ID: "1",
 				},
