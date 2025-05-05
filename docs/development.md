@@ -34,4 +34,3 @@ Deploy the image to Cloud Run
 ```
 gcloud run deploy cloud-run-slack-bot --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/cloud-run-slack-bot --project "$PROJECT" --region "$REGION"
 ```
-
