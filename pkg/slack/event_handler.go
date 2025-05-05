@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	ActionIdDescribeService  = "select-service-for-describe"
-	ActionIdMetricsService   = "select-service-for-metrics"
-	ActionIdCurrentService   = "select-current-service"
+	ActionIdDescribeResource = "select-resource-for-describe"
+	ActionIdMetricsResource  = "select-resource-for-metrics"
+	ActionIdCurrentResource  = "select-current-resource"
 	ActionIdMetrics          = "metrics"
 	defaultDuration          = 24 * time.Hour
 	defaultAggregationPeriod = 5 * time.Minute
@@ -35,8 +35,10 @@ var durationAggregationPeriodMap = map[string]time.Duration{
 
 type Memory struct {
 	mu sync.Mutex
-	// memory for storing target cloud run service (slack user id -> service id)
+	// memory for storing target cloud run service or job (slack user id -> service/job id)
 	data map[string]string
+	// Stores the resource type ("service" or "job")
+	resourceType map[string]string
 }
 
 func (m *Memory) Get(key string) (string, bool) {
@@ -46,14 +48,33 @@ func (m *Memory) Get(key string) (string, bool) {
 	return val, ok
 }
 
-func (m *Memory) Set(key, val string) {
+func (m *Memory) GetResourceType(key string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	resourceType, ok := m.resourceType[key]
+	if !ok {
+		return "service" // Default to service for backward compatibility
+	}
+	return resourceType
+}
+
+func (m *Memory) IsJob(key string) bool {
+	// Keep for backward compatibility
+	return m.GetResourceType(key) == "job"
+}
+
+func (m *Memory) Set(key, val string, resourceType string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.data[key] = val
+	m.resourceType[key] = resourceType
 }
 
 func NewMemory() *Memory {
-	return &Memory{data: make(map[string]string)}
+	return &Memory{
+		data:         make(map[string]string),
+		resourceType: make(map[string]string),
+	}
 }
 
 // SlackEventHandler handles slack events this is used by SlackEventService and SlackSocketService
@@ -86,20 +107,31 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 			command = message[1] // e.Text is "<@bot_id> command"
 		}
 		log.Printf("command: %s\n", command)
-		currentService, ok := h.memory.Get(e.User)
+		currentItem, ok := h.memory.Get(e.User)
+		
+		// Check if we're dealing with services or jobs
 		switch command {
 		case "describe", "d":
 			if !ok {
-				return h.list(ctx, e.Channel, ActionIdDescribeService)
+				return h.list(ctx, e.Channel, ActionIdDescribeResource)
 			}
-			return h.describeService(ctx, e.Channel, currentService)
+			resourceType := h.memory.GetResourceType(e.User)
+			if resourceType == "job" {
+				return h.describeJob(ctx, e.Channel, currentItem)
+			}
+			return h.describeService(ctx, e.Channel, currentItem)
 		case "metrics", "m":
 			if !ok {
-				return h.list(ctx, e.Channel, ActionIdMetricsService)
+				return h.list(ctx, e.Channel, ActionIdMetricsResource)
 			}
-			return h.getServiceMetrics(ctx, e.Channel, currentService, "count", defaultDuration, defaultAggregationPeriod)
+			resourceType := h.memory.GetResourceType(e.User)
+			if resourceType == "job" {
+				// Jobs don't have metrics like services, so show description instead
+				return h.describeJob(ctx, e.Channel, currentItem)
+			}
+			return h.getServiceMetrics(ctx, e.Channel, currentItem, "count", defaultDuration, defaultAggregationPeriod)
 		case "set", "s":
-			return h.list(ctx, e.Channel, ActionIdCurrentService)
+			return h.list(ctx, e.Channel, ActionIdCurrentResource)
 		case "help", "h":
 			return h.help(ctx, e.Channel, e.User)
 		case "sample":
@@ -117,15 +149,40 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 	switch interaction.Type {
 	case slack.InteractionTypeBlockActions:
 		action := interaction.ActionCallback.BlockActions[0]
+		
+		// Parse resource type and name from the selected option value
+		value := action.SelectedOption.Value
+		resourceName := value
+		resourceType := "service" // Default
+		
+		// Check if value contains the new format with type:name
+		if strings.Contains(value, ":") {
+			parts := strings.SplitN(value, ":", 2)
+			resourceType = parts[0]
+			resourceName = parts[1]
+		}
+		
 		switch action.ActionID {
-		case ActionIdDescribeService:
-			h.memory.Set(interaction.User.ID, action.SelectedOption.Value)
-			return h.describeService(ctx, interaction.Channel.ID, action.SelectedOption.Value)
-		case ActionIdMetricsService:
-			h.memory.Set(interaction.User.ID, action.SelectedOption.Value)
-			return h.getServiceMetrics(ctx, interaction.Channel.ID, action.SelectedOption.Value, "count", defaultDuration, defaultAggregationPeriod)
-		case ActionIdCurrentService:
-			return h.setCurrentService(ctx, interaction.Channel.ID, interaction.User.ID, action.SelectedOption.Value)
+		case ActionIdDescribeResource:
+			// Handle all describe actions
+			h.memory.Set(interaction.User.ID, resourceName, resourceType)
+			if resourceType == "job" {
+				return h.describeJob(ctx, interaction.Channel.ID, resourceName)
+			}
+			return h.describeService(ctx, interaction.Channel.ID, resourceName)
+			
+		case ActionIdMetricsResource:
+			// Handle all metrics actions
+			h.memory.Set(interaction.User.ID, resourceName, resourceType)
+			if resourceType == "job" {
+				// Jobs don't have metrics, show job description instead
+				return h.describeJob(ctx, interaction.Channel.ID, resourceName)
+			}
+			return h.getServiceMetrics(ctx, interaction.Channel.ID, resourceName, "count", defaultDuration, defaultAggregationPeriod)
+			
+		case ActionIdCurrentResource:
+			// Handle all set current resource actions
+			return h.setCurrentResource(ctx, interaction.Channel.ID, interaction.User.ID, resourceName, resourceType)
 		}
 	case slack.InteractionTypeInteractionMessage:
 		callbackId := interaction.CallbackID
@@ -146,7 +203,7 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 			// metricsTypeVal := interaction.ActionCallback.AttachmentActions[1].SelectedOptions[0].Value
 			svc, ok := h.memory.Get(interaction.User.ID)
 			if !ok {
-				return h.list(ctx, interaction.Channel.ID, ActionIdMetricsService)
+				return h.list(ctx, interaction.Channel.ID, ActionIdMetricsResource)
 			}
 			duration, err := time.ParseDuration(durationVal)
 			if err != nil {
@@ -169,15 +226,15 @@ func (h *SlackEventHandler) help(ctx context.Context, channelId, userId string) 
 		Fields: []slack.AttachmentField{
 			{
 				Title: "`describe` or `d`",
-				Value: "describe the target Cloud Run service.\n you can check the latest revision, last modifier, update time, etc.",
+				Value: "describe the target Cloud Run service or job.\n you can check the latest revision, last modifier, update time, etc.",
 			},
 			{
 				Title: "`metrics` or `m`",
-				Value: "show the request count of the target Cloud Run service.\n you can check the request count per revision.",
+				Value: "show the request count of the target Cloud Run service or job description.\n for services, you can check the request count per revision.",
 			},
 			{
 				Title: "`set` or `s`",
-				Value: "set the target Cloud Run service.\n This is set for each Slack user.",
+				Value: "set the target Cloud Run service or job.\n this displays a list of both services and jobs to select from.",
 			},
 		},
 	}
@@ -189,23 +246,51 @@ func (h *SlackEventHandler) help(ctx context.Context, channelId, userId string) 
 	return err
 }
 
-func (h *SlackEventHandler) setCurrentService(ctx context.Context, channelId, userId, svcName string) error {
-	h.memory.Set(userId, svcName)
-	_, err := h.client.PostEphemeralContext(ctx, channelId, userId, slack.MsgOptionText(fmt.Sprintf("current service is set to %s", svcName), false))
+func (h *SlackEventHandler) setCurrentResource(ctx context.Context, channelId, userId, name string, resourceType string) error {
+	h.memory.Set(userId, name, resourceType)
+	_, err := h.client.PostEphemeralContext(ctx, channelId, userId, slack.MsgOptionText(fmt.Sprintf("current %s is set to %s", resourceType, name), false))
 	return err
 }
 
 func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) error {
+	// Get both services and jobs
 	svcNames, err := h.rClient.ListServices(ctx)
 	if err != nil {
 		return err
 	}
+	
+	jobNames, err := h.rClient.ListJobs(ctx)
+	if err != nil {
+		return err
+	}
+	
 	options := []*slack.OptionBlockObject{}
+	
+	// Add services with [SVC] prefix
 	for _, svcName := range svcNames {
-		fmt.Println(svcName)
+		displayName := fmt.Sprintf("[SVC] %s", svcName)
+		value := fmt.Sprintf("service:%s", svcName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: svcName}, Value: svcName,
+			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName}, 
+			Value: value,
 		})
+	}
+	
+	// Add jobs with [JOB] prefix
+	for _, jobName := range jobNames {
+		displayName := fmt.Sprintf("[JOB] %s", jobName)
+		value := fmt.Sprintf("job:%s", jobName)
+		options = append(options, &slack.OptionBlockObject{
+			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName}, 
+			Value: value,
+		})
+	}
+	
+	// If no resources found, inform the user
+	if len(options) == 0 {
+		_, _, err = h.client.PostMessageContext(ctx, channel, 
+			slack.MsgOptionText("No Cloud Run services or jobs found in this project/region.", false))
+		return err
 	}
 
 	_, _, err = h.client.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
@@ -213,7 +298,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 			Type: slack.MBTSection,
 			Text: &slack.TextBlockObject{
 				Type: slack.PlainTextType,
-				Text: "Please select a Cloud Run service.",
+				Text: "Please select a Cloud Run service or job.",
 			},
 			Accessory: &slack.Accessory{
 				SelectElement: &slack.SelectBlockElement{
@@ -221,7 +306,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 					Type:     slack.OptTypeStatic,
 					Placeholder: &slack.TextBlockObject{
 						Type: slack.PlainTextType,
-						Text: "Select a service",
+						Text: "Select a resource",
 					},
 					Options: options,
 				},
@@ -230,6 +315,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 	))
 	return err
 }
+
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName, metricsType string, duration, aggregationPeriod time.Duration) error {
 	now := time.Now().UTC()
@@ -405,6 +491,51 @@ func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcN
 				{
 					Title: "Resource Limit",
 					Value: fmt.Sprintf("- cpu:%s\n- memory:%s", svc.ResourceLimits["cpu"], svc.ResourceLimits["memory"]),
+					Short: true,
+				},
+			},
+		}))
+	}
+	_, _, err = h.client.PostMessageContext(ctx, channelId, msgOptions...)
+	return err
+}
+
+func (h *SlackEventHandler) describeJob(ctx context.Context, channelId, jobName string) error {
+	msgOptions := []slack.MsgOption{}
+	job, err := h.rClient.GetJob(ctx, jobName)
+	if err != nil {
+		msgOptions = append(msgOptions, slack.MsgOptionText("Failed to get job: "+err.Error(), false))
+	} else {
+		msgOptions = append(msgOptions, slack.MsgOptionAttachments(slack.Attachment{
+			Fields: []slack.AttachmentField{
+				{
+					Title: "Name",
+					Value: job.Name,
+					Short: true,
+				},
+				{
+					Title: "Image",
+					Value: job.Image,
+					Short: true,
+				},
+				{
+					Title: "LastModifier",
+					Value: job.LastModifier,
+					Short: true,
+				},
+				{
+					Title: "UpdateTime",
+					Value: job.UpdateTime.Format("2006/01/02 15:04:05"),
+					Short: true,
+				},
+				{
+					Title: "Resource Limit",
+					Value: fmt.Sprintf("- cpu:%s\n- memory:%s", job.ResourceLimits["cpu"], job.ResourceLimits["memory"]),
+					Short: true,
+				},
+				{
+					Title: "Console URL",
+					Value: fmt.Sprintf("<%s|Cloud Run Job>", job.GetYamlUrl()),
 					Short: true,
 				},
 			},

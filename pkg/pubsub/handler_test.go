@@ -14,29 +14,64 @@ import (
 func TestCloudRunAuditLogHandler(t *testing.T) {
 	tests := []struct {
 		name           string
-		serviceName    string
+		resourceName   string
+		resourceType   string // "service" or "job"
+		methodName     string
 		channels       map[string]string
 		defaultChannel string
 		wantStatus     int
 	}{
 		{
 			name:           "service with specific channel",
-			serviceName:    "test-service",
+			resourceName:   "test-service",
+			resourceType:   "service",
+			methodName:     "google.cloud.run.v1.Services.ReplaceService",
 			channels:       map[string]string{"test-service": "test-channel"},
 			defaultChannel: "default-channel",
 			wantStatus:     http.StatusOK,
 		},
 		{
 			name:           "service using default channel",
-			serviceName:    "other-service",
+			resourceName:   "other-service",
+			resourceType:   "service",
+			methodName:     "google.cloud.run.v1.Services.ReplaceService",
 			channels:       map[string]string{"test-service": "test-channel"},
 			defaultChannel: "default-channel",
 			wantStatus:     http.StatusOK,
 		},
 		{
 			name:           "service with no channel and no default",
-			serviceName:    "other-service",
+			resourceName:   "other-service",
+			resourceType:   "service",
+			methodName:     "google.cloud.run.v1.Services.ReplaceService",
 			channels:       map[string]string{"test-service": "test-channel"},
+			defaultChannel: "",
+			wantStatus:     http.StatusBadRequest,
+		},
+		{
+			name:           "job with specific channel",
+			resourceName:   "test-job",
+			resourceType:   "job",
+			methodName:     "google.cloud.run.v1.Jobs.ReplaceJob",
+			channels:       map[string]string{"test-job": "test-channel"},
+			defaultChannel: "default-channel",
+			wantStatus:     http.StatusOK,
+		},
+		{
+			name:           "job using default channel",
+			resourceName:   "other-job",
+			resourceType:   "job",
+			methodName:     "google.cloud.run.v1.Jobs.ReplaceJob",
+			channels:       map[string]string{"test-job": "test-channel"},
+			defaultChannel: "default-channel",
+			wantStatus:     http.StatusOK,
+		},
+		{
+			name:           "job with no channel and no default",
+			resourceName:   "other-job",
+			resourceType:   "job",
+			methodName:     "google.cloud.run.v1.Jobs.ReplaceJob",
+			channels:       map[string]string{"test-job": "test-channel"},
 			defaultChannel: "",
 			wantStatus:     http.StatusBadRequest,
 		},
@@ -53,15 +88,15 @@ func TestCloudRunAuditLogHandler(t *testing.T) {
 					Data: []byte(fmt.Sprintf(`{
 						"resource": {
 							"labels": {
-								"service_name": "%s"
+								"%s_name": "%s"
 							},
-							"type": "cloud_run_revision"
+							"type": "%s"
 						},
 						"severity": "NOTICE",
 						"protoPayload": {
-							"methodName": "google.cloud.run.v1.Services.ReplaceService",
+							"methodName": "%s",
 							"request": {
-								"name": "projects/test-project/locations/asia-northeast1/services/%s"
+								"name": "projects/test-project/locations/asia-northeast1/%ss/%s"
 							},
 							"response": {
 								"metadata": {
@@ -72,7 +107,15 @@ func TestCloudRunAuditLogHandler(t *testing.T) {
 								}
 							}
 						}
-					}`, tt.serviceName, tt.serviceName)),
+					}`, 
+					tt.resourceType, tt.resourceName, 
+					func() string {
+						if tt.resourceType == "job" {
+							return "cloud_run_job"
+						}
+						return "cloud_run_revision"
+					}(), 
+					tt.methodName, tt.resourceType, tt.resourceName)),
 					ID: "1",
 				},
 				Subscription: "test-subscription",

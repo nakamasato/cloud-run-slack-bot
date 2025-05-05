@@ -24,7 +24,7 @@ variable "channel" {
 }
 
 variable "service_channel_mapping" {
-  description = "Mapping of service names to Slack channel IDs (format: service1:channel1,service2:channel2)"
+  description = "Mapping of service and job names to Slack channel IDs (format: service1:channel1,job1:channel2,service2:channel3)"
 }
 ```
 
@@ -196,7 +196,7 @@ resource "google_pubsub_topic_iam_member" "log_writer" {
 resource "google_logging_project_sink" "cloud_run_audit_log" {
   name                   = "cloud_run_audit_log"
   destination            = "pubsub.googleapis.com/projects/${google_pubsub_topic.cloud_run_audit_log.project}/topics/${google_pubsub_topic.cloud_run_audit_log.name}"
-  filter                 = "resource.type = cloud_run_revision AND (logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Factivity OR logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Fsystem_event)"
+  filter                 = "(resource.type = cloud_run_revision OR resource.type = cloud_run_job) AND (logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Factivity OR logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Fsystem_event)"
   unique_writer_identity = true
 }
 
