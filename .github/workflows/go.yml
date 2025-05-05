@@ -39,7 +39,7 @@ jobs:
         run: |
           VERSION=$(grep 'golangci/golangci-lint@' aqua.yaml | sed -E 's/.*golangci\/golangci-lint@(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
+          
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
@@ -73,7 +73,7 @@ jobs:
         run: |
           VERSION=$(grep 'ko-build/ko@' aqua.yaml | sed -E 's/.*ko-build\/ko@(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
+          
       - name: Set up ko
         uses: ko-build/setup-ko@v0.9
         env:
