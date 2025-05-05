@@ -137,9 +137,11 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	if jobName != "" {
 		jobOrSvcName = jobName
 		resourceType = "job"
-	} else {
+	} else if serviceName != "" {
 		jobOrSvcName = serviceName
 		resourceType = "service"
+	} else {
+		log.Printf("Warning: No job or service name found in the log entry")
 	}
 
 	lastModifier := logEntry.ProtoPayload.Response.Metadata.Annotations.LastModifier
@@ -158,6 +160,10 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	channel, ok := h.channels[jobOrSvcName]
 	if !ok {
 		channel = h.defaultChannel
+	}
+	if channel == "" {
+		log.Printf("Warning: No channel found for '%s'(%s)", jobOrSvcName, resourceType)
+		return
 	}
 	log.Printf("Set Channel to '%s' for '%s'(%s)", channel, jobOrSvcName, resourceType)
 
