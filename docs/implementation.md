@@ -21,8 +21,7 @@ The bot can:
 
 - `describe` or `d`: Describe the currently selected Cloud Run service or job
 - `metrics` or `m`: Show metrics for the currently selected Cloud Run service
-- `set` or `s`: Set the current Cloud Run service
-- `job` or `j`: List and select a Cloud Run job
+- `set` or `s`: Set the current Cloud Run service or job
 - `help` or `h`: Show help information
 
 ## Architecture
