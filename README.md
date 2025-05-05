@@ -69,7 +69,7 @@ Deploy to Cloud Run
 gcloud run deploy cloud-run-slack-bot \
     --set-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest" \
     --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp,SLACK_CHANNEL=general,SERVICE_CHANNEL_MAPPING=service1:channel1,service2:channel2" \
-    --image nakamasato/cloud-run-slack-bot:0.0.2 \
+    --image nakamasato/cloud-run-slack-bot:0.5.1 \
     --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
     --project "$PROJECT" --region "$REGION"
 ```
@@ -79,9 +79,10 @@ gcloud run deploy cloud-run-slack-bot \
 1. Create a new Slack App
     - [https://api.slack.com/apps](https://api.slack.com/apps)
 1. Add the following scopes:
-    - [mention:read](https://api.slack.com/scopes/app_mentions:read)
+    - [app_mentions:read](https://api.slack.com/scopes/app_mentions:read)
     - [chat:write](https://api.slack.com/scopes/chat:write)
     - [files:write](https://api.slack.com/scopes/files:write)
+    - [connections:write](https://api.slack.com/scopes/connections:write) (required only when using Socket Mode with `SLACK_APP_MODE=socket`)
 1. Install the app to your workspace
 1. Event Subscriptions
     - Request URL: `https://your-cloud-run-url/slack/events`

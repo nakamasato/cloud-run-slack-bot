@@ -34,10 +34,16 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Extract golangci-lint version
+        id: golangci-lint-version
+        run: |
+          VERSION=$(grep 'golangci/golangci-lint@' aqua.yaml | sed -E 's/.*golangci\/golangci-lint@(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.0.2
+          version: ${{ steps.golangci-lint-version.outputs.version }}
 
   build:
     needs:
@@ -62,12 +68,18 @@ jobs:
         run: |
           echo "REPO=${{ github.event_name == 'release' && 'cloud-run-slack-bot' || 'cloud-run-slack-bot-dev' }}" >> "$GITHUB_OUTPUT"
 
+      - name: Extract ko version
+        id: ko-version
+        run: |
+          VERSION=$(grep 'ko-build/ko@' aqua.yaml | sed -E 's/.*ko-build\/ko@(v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Set up ko
         uses: ko-build/setup-ko@v0.9
         env:
           KO_DOCKER_REPO: "index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.set_config.outputs.REPO }}"
         with:
-          version: v0.15.0
+          version: ${{ steps.ko-version.outputs.version }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
