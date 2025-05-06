@@ -72,9 +72,16 @@ func main() {
 	l = l.WithTraceID(traceID)
 	ctx = logger.WithContext(ctx, l)
 
+	// Get environment
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "dev" // Default to dev if not specified
+	}
+
 	l.Info("Starting cloud-run-slack-bot",
 		zap.String("project", project),
 		zap.String("region", region),
+		zap.String("environment", env),
 		zap.String("trace_id", traceID))
 
 	// Initialize monitoring client

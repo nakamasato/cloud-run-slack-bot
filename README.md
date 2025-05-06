@@ -15,6 +15,10 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
     1. Describe Cloud Run service.
     1. Describe Cloud Run job.
 1. Receive notification for Cloud Run audit logs on Slack.
+1. Observability features.
+    1. Structured JSON logging with zap, compatible with Cloud Logging.
+    1. Distributed tracing with OpenTelemetry, integrated with Cloud Trace.
+    1. Trace context propagation for HTTP requests and Slack events.
 
 ## Cloud Run
 
@@ -22,6 +26,7 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 
 1. `roles/run.viewer`: To get information of Cloud Run services
 1. `roles/monitoring.viewer`: To get metrics of Cloud Run services
+1. `roles/cloudtrace.agent`: To send trace data to Cloud Trace (required only when `ENV=prod`)
 
 ### Environment Variables
 
@@ -34,6 +39,8 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
 1. `SLACK_CHANNEL`: Default Slack Channel ID to receive notification for Cloud Run audit logs (used when service is not specified in `SERVICE_CHANNEL_MAPPING`)
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
+1. `ENV`: Environment setting (`prod` or `dev`). When set to `prod`, the application will send traces to Cloud Trace. When not set or set to any other value, no traces will be sent (default: `dev`)
+1. `SERVICE_NAME`: Service name used in logs (default: `cloud-run-slack-bot`)
 
 ### Deploy
 
@@ -96,6 +103,32 @@ gcloud run deploy cloud-run-slack-bot \
 
 <img src="docs/slack-channel-preview.png" alt="preview" width="400"/>
 
+
+## Observability
+
+### Structured Logging
+
+The application uses zap for structured JSON logging that integrates well with Cloud Logging. All logs include:
+
+- Timestamp in RFC3339 format
+- Log level (INFO, ERROR, etc.)
+- Service name
+- Message
+- Trace ID (when available)
+- Additional context-specific fields
+
+Logs can be viewed in the [Cloud Logging Console](https://console.cloud.google.com/logs) by filtering for the service name.
+
+### Distributed Tracing
+
+When `ENV=prod` is set, the application will send trace data to Cloud Trace. The tracing system:
+
+- Creates spans for each HTTP request
+- Creates spans for Slack event and interaction handling
+- Connects related operations with parent-child relationships
+- Includes tracing information in logs for correlation
+
+Traces can be viewed in the [Cloud Trace Console](https://console.cloud.google.com/traces).
 
 ## More
 

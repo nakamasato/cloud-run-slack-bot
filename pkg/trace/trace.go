@@ -3,6 +3,7 @@ package trace
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -29,16 +30,29 @@ func Initialize(ctx context.Context, serviceName string) (func(context.Context) 
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Configure OTLP exporter
-	traceExporter, err := otlptrace.New(
-		ctx,
-		otlptracegrpc.NewClient(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+	// Get environment
+	env := os.Getenv("ENV")
+	isProd := env == "prod"
+
+	// Initialize trace exporter
+	var traceExporter sdktrace.SpanExporter
+	if isProd {
+		// In production, use the default Cloud Trace exporter
+		// This will use Application Default Credentials from the environment
+		traceExporter, err = otlptrace.New(
+			ctx,
+			otlptracegrpc.NewClient(),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create GCP trace exporter: %w", err)
+		}
+	} else {
+		// In non-production, use a no-op exporter that doesn't send data
+		// This avoids credentials and quota issues during development and testing
+		traceExporter = newNoopExporter()
 	}
 
-	// Configure trace provider with the exporter
+	// Configure trace provider with the appropriate exporter
 	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
@@ -62,6 +76,22 @@ func Initialize(ctx context.Context, serviceName string) (func(context.Context) 
 		}
 		return nil
 	}, nil
+}
+
+// newNoopExporter creates a no-op exporter that doesn't send any data
+// This is useful for development and testing
+type noopExporter struct{}
+
+func newNoopExporter() sdktrace.SpanExporter {
+	return &noopExporter{}
+}
+
+func (e *noopExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	return nil
+}
+
+func (e *noopExporter) Shutdown(ctx context.Context) error {
+	return nil
 }
 
 // GetTracer returns the global tracer

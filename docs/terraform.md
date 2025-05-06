@@ -39,6 +39,8 @@ locals {
     SLACK_CHANNEL        = var.channel
     SERVICE_CHANNEL_MAPPING = var.service_channel_mapping
     TMP_DIR             = "/tmp"
+    ENV                 = "prod"  # Set to "prod" to enable Cloud Trace integration
+    SERVICE_NAME        = "cloud-run-slack-bot"
   }
   cloud_run_slack_bot_secrets = {
     SLACK_BOT_TOKEN      = google_secret_manager_secret.slack_bot_token_cloud_run_slack_bot.secret_id
