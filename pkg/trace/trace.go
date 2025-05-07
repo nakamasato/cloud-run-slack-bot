@@ -6,10 +6,9 @@ import (
 	"os"
 	"time"
 
+	texporter "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -37,14 +36,12 @@ func Initialize(ctx context.Context, serviceName string) (func(context.Context) 
 	// Initialize trace exporter
 	var traceExporter sdktrace.SpanExporter
 	if isProd {
-		// In production, use the default Cloud Trace exporter
+		// In production, use the Google Cloud Trace exporter
 		// This will use Application Default Credentials from the environment
-		traceExporter, err = otlptrace.New(
-			ctx,
-			otlptracegrpc.NewClient(),
-		)
+		projectID := os.Getenv("PROJECT")
+		traceExporter, err = texporter.New(texporter.WithProjectID(projectID))
 		if err != nil {
-			return nil, fmt.Errorf("failed to create GCP trace exporter: %w", err)
+			return nil, fmt.Errorf("failed to create Google Cloud Trace exporter: %w", err)
 		}
 	} else {
 		// In non-production, use a no-op exporter that doesn't send data
@@ -53,11 +50,10 @@ func Initialize(ctx context.Context, serviceName string) (func(context.Context) 
 	}
 
 	// Configure trace provider with the appropriate exporter
-	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
+		sdktrace.WithBatcher(traceExporter),
 	)
 	otel.SetTracerProvider(tracerProvider)
 
