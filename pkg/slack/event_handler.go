@@ -11,10 +11,13 @@ import (
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logger"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/visualize"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"go.uber.org/zap"
 )
 
 const (
@@ -95,9 +98,15 @@ func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Client, mClien
 	return &SlackEventHandler{client: client, rClient: rClient, mClient: mClient, memory: NewMemory(), tmpDir: tmpDir}
 }
 
-// NewSlackEventHandler handles AppMention events
-func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error {
-	ctx := context.Background()
+// HandleEvent handles AppMention events
+func (h *SlackEventHandler) HandleEvent(ctx context.Context, event *slackevents.EventsAPIEvent) error {
+	// Get logger from context
+	l := logger.FromContext(ctx)
+
+	// Create a child span for this event
+	ctx, span := trace.GetTracer().Start(ctx, "HandleEvent")
+	defer span.End()
+
 	innerEvent := event.InnerEvent
 	switch e := innerEvent.Data.(type) {
 	case *slackevents.AppMentionEvent:
@@ -106,7 +115,12 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 		if len(message) > 1 {
 			command = message[1] // e.Text is "<@bot_id> command"
 		}
-		log.Printf("command: %s\n", command)
+		l.Info("Received command",
+			zap.String("command", command),
+			zap.String("user", e.User),
+			zap.String("channel", e.Channel),
+			zap.String("text", e.Text))
+
 		currentItem, ok := h.memory.Get(e.User)
 
 		// Check if we're dealing with services or jobs
@@ -144,8 +158,19 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 }
 
 // HandleInteraction handles Slack interaction events e.g. selectbox, etc.
-func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCallback) error {
-	ctx := context.Background()
+func (h *SlackEventHandler) HandleInteraction(ctx context.Context, interaction *slack.InteractionCallback) error {
+	// Get logger from context
+	l := logger.FromContext(ctx)
+
+	// Create a child span for this interaction
+	ctx, span := trace.GetTracer().Start(ctx, "HandleInteraction")
+	defer span.End()
+
+	l.Info("Handling interaction",
+		zap.String("type", string(interaction.Type)),
+		zap.String("user_id", interaction.User.ID),
+		zap.String("channel_id", interaction.Channel.ID))
+
 	switch interaction.Type {
 	case slack.InteractionTypeBlockActions:
 		action := interaction.ActionCallback.BlockActions[0]
