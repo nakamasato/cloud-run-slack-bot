@@ -7,10 +7,16 @@ import (
 
 func TestLoadConfig_MultiProject(t *testing.T) {
 	// Set up environment variables
-	os.Setenv("SLACK_BOT_TOKEN", "test-token")
-	os.Setenv("SLACK_SIGNING_SECRET", "test-secret")
-	os.Setenv("SLACK_CHANNEL", "default-channel")
-	os.Setenv("PROJECTS_CONFIG", `[
+	if err := os.Setenv("SLACK_BOT_TOKEN", "test-token"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("SLACK_SIGNING_SECRET", "test-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("SLACK_CHANNEL", "default-channel"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("PROJECTS_CONFIG", `[
 		{
 			"id": "project1",
 			"region": "us-central1",
@@ -24,13 +30,15 @@ func TestLoadConfig_MultiProject(t *testing.T) {
 			"region": "us-east1",
 			"defaultChannel": "project2-channel"
 		}
-	]`)
+	]`); err != nil {
+		t.Fatal(err)
+	}
 
 	defer func() {
-		os.Unsetenv("SLACK_BOT_TOKEN")
-		os.Unsetenv("SLACK_SIGNING_SECRET")
-		os.Unsetenv("SLACK_CHANNEL")
-		os.Unsetenv("PROJECTS_CONFIG")
+		_ = os.Unsetenv("SLACK_BOT_TOKEN")
+		_ = os.Unsetenv("SLACK_SIGNING_SECRET")
+		_ = os.Unsetenv("SLACK_CHANNEL")
+		_ = os.Unsetenv("PROJECTS_CONFIG")
 	}()
 
 	config, err := LoadConfig()
@@ -53,20 +61,32 @@ func TestLoadConfig_MultiProject(t *testing.T) {
 
 func TestLoadConfig_LegacyMode(t *testing.T) {
 	// Set up environment variables for legacy mode
-	os.Setenv("SLACK_BOT_TOKEN", "test-token")
-	os.Setenv("SLACK_SIGNING_SECRET", "test-secret")
-	os.Setenv("PROJECT", "legacy-project")
-	os.Setenv("REGION", "us-central1")
-	os.Setenv("SLACK_CHANNEL", "default-channel")
-	os.Setenv("SERVICE_CHANNEL_MAPPING", "service1:team1,service2:team2")
+	if err := os.Setenv("SLACK_BOT_TOKEN", "test-token"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("SLACK_SIGNING_SECRET", "test-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("PROJECT", "legacy-project"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("REGION", "us-central1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("SLACK_CHANNEL", "default-channel"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("SERVICE_CHANNEL_MAPPING", "service1:team1,service2:team2"); err != nil {
+		t.Fatal(err)
+	}
 
 	defer func() {
-		os.Unsetenv("SLACK_BOT_TOKEN")
-		os.Unsetenv("SLACK_SIGNING_SECRET")
-		os.Unsetenv("PROJECT")
-		os.Unsetenv("REGION")
-		os.Unsetenv("SLACK_CHANNEL")
-		os.Unsetenv("SERVICE_CHANNEL_MAPPING")
+		_ = os.Unsetenv("SLACK_BOT_TOKEN")
+		_ = os.Unsetenv("SLACK_SIGNING_SECRET")
+		_ = os.Unsetenv("PROJECT")
+		_ = os.Unsetenv("REGION")
+		_ = os.Unsetenv("SLACK_CHANNEL")
+		_ = os.Unsetenv("SERVICE_CHANNEL_MAPPING")
 	}()
 
 	config, err := LoadConfig()
