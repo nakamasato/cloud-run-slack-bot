@@ -25,7 +25,7 @@ func TestLoadConfig_MultiProject(t *testing.T) {
 			"defaultChannel": "project2-channel"
 		}
 	]`)
-	
+
 	defer func() {
 		os.Unsetenv("SLACK_BOT_TOKEN")
 		os.Unsetenv("SLACK_SIGNING_SECRET")
@@ -59,7 +59,7 @@ func TestLoadConfig_LegacyMode(t *testing.T) {
 	os.Setenv("REGION", "us-central1")
 	os.Setenv("SLACK_CHANNEL", "default-channel")
 	os.Setenv("SERVICE_CHANNEL_MAPPING", "service1:team1,service2:team2")
-	
+
 	defer func() {
 		os.Unsetenv("SLACK_BOT_TOKEN")
 		os.Unsetenv("SLACK_SIGNING_SECRET")

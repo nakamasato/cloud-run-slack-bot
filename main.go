@@ -28,11 +28,11 @@ func main() {
 	cfg.LogConfiguration()
 
 	ctx := context.Background()
-	
+
 	// Initialize clients for all projects
 	rClients := make(map[string]*cloudrun.Client)
 	mClients := make(map[string]*monitoring.Client)
-	
+
 	for _, project := range cfg.Projects {
 		// Create monitoring client for this project
 		mClient, err := monitoring.NewMonitoringClient(project.ID)
@@ -40,7 +40,7 @@ func main() {
 			log.Fatalf("Failed to create monitoring client for project %s: %v", project.ID, err)
 		}
 		mClients[project.ID] = mClient
-		
+
 		// Create Cloud Run client for this project
 		rClient, err := cloudrun.NewClient(ctx, project.ID, project.Region)
 		if err != nil {
@@ -64,7 +64,7 @@ func main() {
 		ops = append(ops, slack.OptionAppLevelToken(cfg.SlackAppToken))
 	}
 	sClient := slack.New(cfg.SlackBotToken, ops...)
-	
+
 	// Create multi-project handler
 	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, cfg.TmpDir, cfg)
 

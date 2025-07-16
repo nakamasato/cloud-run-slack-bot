@@ -19,18 +19,18 @@ graph TB
             HTTP[HTTP Service<br/>cloudrunslackbot_http.go]
             SOCKET[Socket Service<br/>cloudrunslackbot_socket.go]
         end
-        
+
         subgraph "Core Components"
             CONFIG[Configuration<br/>config.go]
             HANDLER[Multi-Project Handler<br/>event_handler.go]
             MEMORY[User Memory<br/>Thread-safe Context]
         end
-        
+
         subgraph "GCP Clients"
             CRUNCLIENT[Cloud Run Client<br/>cloudrun.go]
             MONCLIENT[Monitoring Client<br/>client.go]
         end
-        
+
         subgraph "Processing"
             VISUALIZE[Chart Generator<br/>visualize.go]
             PUBSUBHANDLER[Audit Log Handler<br/>handler.go]
@@ -49,41 +49,41 @@ graph TB
     %% User Interactions
     SLACK -->|App Mentions & Interactions| HTTP
     SLACK -->|Socket Mode Events| SOCKET
-    
+
     %% Service Layer Processing
     HTTP --> HANDLER
     SOCKET --> HANDLER
-    
+
     %% Configuration & Memory
     CONFIG --> HANDLER
     HANDLER --> MEMORY
-    
+
     %% GCP API Calls
     HANDLER --> CRUNCLIENT
     HANDLER --> MONCLIENT
     HANDLER --> VISUALIZE
-    
+
     %% External API Interactions
     CRUNCLIENT --> SERVICES
     CRUNCLIENT --> JOBS
     MONCLIENT --> MONITORING
-    
+
     %% Audit Log Flow
     AUDITLOGS --> PUBSUB
     PUBSUB -->|HTTP Webhook| PUBSUBHANDLER
-    
+
     %% Response Generation
     VISUALIZE -->|Chart Images| SLACK
     HANDLER -->|Messages & Attachments| SLACK
     PUBSUBHANDLER -->|Audit Notifications| SLACK
-    
+
     %% Command Flow Examples
     subgraph "Command Examples"
         CMD1["@bot describe myservice"]
         CMD2["@bot metrics myservice"]
         CMD3["@bot set myservice"]
     end
-    
+
     CMD1 --> HANDLER
     CMD2 --> HANDLER
     CMD3 --> HANDLER
@@ -94,7 +94,7 @@ graph TB
     classDef core fill:#f3e5f5
     classDef gcp fill:#e8f5e8
     classDef processing fill:#fce4ec
-    
+
     class SLACK external
     class HTTP,SOCKET service
     class CONFIG,HANDLER,MEMORY core

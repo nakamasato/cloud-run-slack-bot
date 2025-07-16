@@ -638,7 +638,7 @@ func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.Int
 	case slack.InteractionTypeBlockActions:
 		action := interaction.ActionCallback.BlockActions[0]
 		value := action.SelectedOption.Value
-		
+
 		// Parse project:resourceType:resourceName format
 		parts := strings.SplitN(value, ":", 3)
 		if len(parts) != 3 {
@@ -898,11 +898,11 @@ func (h *MultiProjectSlackEventHandler) setCurrentResource(ctx context.Context, 
 	if len(parts) == 3 {
 		projectID := parts[0]
 		resourceName := parts[2]
-		_, err := h.client.PostEphemeralContext(ctx, channelId, userId, 
+		_, err := h.client.PostEphemeralContext(ctx, channelId, userId,
 			slack.MsgOptionText(fmt.Sprintf("current %s is set to %s in project %s", resourceType, resourceName, projectID), false))
 		return err
 	}
-	_, err := h.client.PostEphemeralContext(ctx, channelId, userId, 
+	_, err := h.client.PostEphemeralContext(ctx, channelId, userId,
 		slack.MsgOptionText(fmt.Sprintf("current %s is set to %s", resourceType, resourceValue), false))
 	return err
 }
@@ -1001,11 +1001,11 @@ func (h *MultiProjectSlackEventHandler) getServiceMetricsForProject(ctx context.
 	now := time.Now().UTC()
 	endTime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
 	startTime := endTime.Add(-1 * duration).UTC()
-	
+
 	var seriesMap *monitoring.TimeSeriesMap
 	var err error
 	var title string
-	
+
 	if metricsType == "latency" {
 		title = "Request Latency"
 		seriesMap, err = mClient.GetCloudRunServiceRequestLatencies(ctx, svcName, aggregationPeriod, startTime, endTime)
@@ -1018,7 +1018,7 @@ func (h *MultiProjectSlackEventHandler) getServiceMetricsForProject(ctx context.
 		_, _, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
 		return err
 	}
-	
+
 	if len(*seriesMap) == 0 {
 		svc, err := rClient.GetService(ctx, svcName)
 		if err != nil {
@@ -1039,7 +1039,7 @@ func (h *MultiProjectSlackEventHandler) getServiceMetricsForProject(ctx context.
 		log.Println(err)
 		return nil
 	}
-	
+
 	file, err := os.Open(imgName)
 	if err != nil {
 		return err

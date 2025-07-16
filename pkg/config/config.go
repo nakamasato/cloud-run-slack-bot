@@ -51,7 +51,7 @@ func LoadConfig() (*Config, error) {
 		if project == "" {
 			return nil, fmt.Errorf("PROJECT env var is required when PROJECTS_CONFIG is not set")
 		}
-		
+
 		region := os.Getenv("REGION")
 		if region == "" {
 			return nil, fmt.Errorf("REGION env var is required when PROJECTS_CONFIG is not set")
@@ -118,7 +118,7 @@ func (c *Config) buildChannelToProjectMapping() {
 		if project.DefaultChannel != "" {
 			c.ChannelToProjects[project.DefaultChannel] = append(c.ChannelToProjects[project.DefaultChannel], project.ID)
 		}
-		
+
 		// Add service-specific channels
 		for _, channel := range project.ServiceChannels {
 			if channel != "" {
@@ -126,7 +126,7 @@ func (c *Config) buildChannelToProjectMapping() {
 			}
 		}
 	}
-	
+
 	// Remove duplicate project IDs for each channel
 	for channel, projects := range c.ChannelToProjects {
 		c.ChannelToProjects[channel] = removeDuplicates(projects)
@@ -169,7 +169,7 @@ func (c *Config) GetChannelForService(projectID, serviceName string) string {
 			}
 		}
 	}
-	
+
 	// Fall back to global default channel
 	return c.DefaultChannel
 }
@@ -191,7 +191,7 @@ func (c *Config) LogConfiguration() {
 	log.Printf("  Slack App Mode: %s", c.SlackAppMode)
 	log.Printf("  Projects:")
 	for _, project := range c.Projects {
-		log.Printf("    - ID: %s, Region: %s, Default Channel: %s", 
+		log.Printf("    - ID: %s, Region: %s, Default Channel: %s",
 			project.ID, project.Region, project.DefaultChannel)
 		if len(project.ServiceChannels) > 0 {
 			log.Printf("      Service Channels: %v", project.ServiceChannels)

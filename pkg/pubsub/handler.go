@@ -296,7 +296,7 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
-	
+
 	if err := json.Unmarshal(body, &m); err != nil {
 		log.Printf("json.Unmarshal: %v", err)
 		http.Error(w, "Failed to parse PubSub message", http.StatusBadRequest)
@@ -366,7 +366,7 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 			Short: true,
 		},
 	}
-	
+
 	if resourceName := logEntry.ProtoPayload.ResourceName; resourceName != "" {
 		parts := strings.Split(resourceName, "/")
 		shortName := parts[len(parts)-1]
@@ -379,7 +379,7 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 			})
 		}
 	}
-	
+
 	if methodName != "" {
 		fields = append(fields, slack.AttachmentField{
 			Title: "Method",
@@ -430,7 +430,7 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 			})
 		}
 	}
-	
+
 	if logEntry.Severity == "ERROR" {
 		fields = append(fields, slack.AttachmentField{
 			Title: "Error",

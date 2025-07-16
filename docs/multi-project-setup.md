@@ -60,7 +60,7 @@ export PROJECTS_CONFIG='[
     "defaultChannel": "shared-alerts"
   },
   {
-    "id": "project2", 
+    "id": "project2",
     "region": "us-east1",
     "defaultChannel": "shared-alerts"
   }
@@ -91,7 +91,7 @@ These variables are required regardless of configuration mode:
 Each project configuration supports:
 
 - **`id`**: GCP project ID (required)
-- **`region`**: GCP region (required)  
+- **`region`**: GCP region (required)
 - **`defaultChannel`**: Default Slack channel for this project (optional)
 - **`serviceChannels`**: Service/job-specific channel mappings (optional)
 
@@ -154,7 +154,7 @@ for PROJECT_ID in project1 project2; do
     gcloud projects add-iam-policy-binding $PROJECT_ID \
         --member="serviceAccount:SERVICE_ACCOUNT_EMAIL" \
         --role="roles/run.viewer"
-    
+
     gcloud projects add-iam-policy-binding $PROJECT_ID \
         --member="serviceAccount:SERVICE_ACCOUNT_EMAIL" \
         --role="roles/monitoring.viewer"
@@ -254,7 +254,7 @@ spec:
                 }
               },
               {
-                "id": "project2", 
+                "id": "project2",
                 "region": "us-east1",
                 "defaultChannel": "project2-alerts"
               }
@@ -385,11 +385,11 @@ Configuration loaded:
    export REGION=us-central1
    export SLACK_CHANNEL=alerts
    export SERVICE_CHANNEL_MAPPING=service1:team1,service2:team2
-   
+
    # After
    export PROJECTS_CONFIG='[{
      "id": "my-project",
-     "region": "us-central1", 
+     "region": "us-central1",
      "defaultChannel": "alerts",
      "serviceChannels": {
        "service1": "team1",
