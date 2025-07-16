@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/visualize"
 	"github.com/slack-go/slack"
@@ -566,5 +567,604 @@ func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error 
 		Channel:  channelId,
 	})
 	log.Println(fSummary)
+	return err
+}
+
+// MultiProjectSlackEventHandler handles slack events for multiple projects
+type MultiProjectSlackEventHandler struct {
+	client   *slack.Client
+	mClients map[string]*monitoring.Client
+	rClients map[string]*cloudrun.Client
+	memory   *Memory
+	tmpDir   string
+	config   *config.Config
+}
+
+func NewMultiProjectSlackEventHandler(client *slack.Client, rClients map[string]*cloudrun.Client, mClients map[string]*monitoring.Client, tmpDir string, cfg *config.Config) *MultiProjectSlackEventHandler {
+	return &MultiProjectSlackEventHandler{
+		client:   client,
+		rClients: rClients,
+		mClients: mClients,
+		memory:   NewMemory(),
+		tmpDir:   tmpDir,
+		config:   cfg,
+	}
+}
+
+func (h *MultiProjectSlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error {
+	ctx := context.Background()
+	innerEvent := event.InnerEvent
+	switch e := innerEvent.Data.(type) {
+	case *slackevents.AppMentionEvent:
+		message := strings.Split(e.Text, " ")
+		command := "describe"
+		if len(message) > 1 {
+			command = message[1]
+		}
+		log.Printf("command: %s\n", command)
+		currentItem, ok := h.memory.Get(e.User)
+
+		// Check if we can auto-detect projects from channel
+		channelProjects := h.config.GetProjectsForChannel(e.Channel)
+		log.Printf("Channel %s is associated with projects: %v", e.Channel, channelProjects)
+
+		switch command {
+		case "describe", "d":
+			if !ok {
+				return h.listResourcesForChannel(ctx, e.Channel, ActionIdDescribeResource, channelProjects)
+			}
+			return h.describeResource(ctx, e.Channel, currentItem)
+		case "metrics", "m":
+			if !ok {
+				return h.listResourcesForChannel(ctx, e.Channel, ActionIdMetricsResource, channelProjects)
+			}
+			return h.getResourceMetrics(ctx, e.Channel, currentItem, "count", defaultDuration, defaultAggregationPeriod)
+		case "set", "s":
+			return h.listResourcesForChannel(ctx, e.Channel, ActionIdCurrentResource, channelProjects)
+		case "help", "h":
+			return h.help(ctx, e.Channel, e.User)
+		case "sample":
+			return h.sample(ctx, e.Channel)
+		default:
+			return h.help(ctx, e.Channel, e.User)
+		}
+	}
+	return fmt.Errorf("unsupported event %v", innerEvent.Type)
+}
+
+func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.InteractionCallback) error {
+	ctx := context.Background()
+	switch interaction.Type {
+	case slack.InteractionTypeBlockActions:
+		action := interaction.ActionCallback.BlockActions[0]
+		value := action.SelectedOption.Value
+		
+		// Parse project:resourceType:resourceName format
+		parts := strings.SplitN(value, ":", 3)
+		if len(parts) != 3 {
+			return fmt.Errorf("invalid resource format: %s", value)
+		}
+		resourceType := parts[1]
+
+		switch action.ActionID {
+		case ActionIdDescribeResource:
+			h.memory.Set(interaction.User.ID, value, resourceType)
+			return h.describeResource(ctx, interaction.Channel.ID, value)
+		case ActionIdMetricsResource:
+			h.memory.Set(interaction.User.ID, value, resourceType)
+			return h.getResourceMetrics(ctx, interaction.Channel.ID, value, "count", defaultDuration, defaultAggregationPeriod)
+		case ActionIdCurrentResource:
+			return h.setCurrentResource(ctx, interaction.Channel.ID, interaction.User.ID, value, resourceType)
+		}
+	case slack.InteractionTypeInteractionMessage:
+		callbackId := interaction.CallbackID
+		switch callbackId {
+		case ActionIdMetrics:
+			durationVal := defaultDuration.String()
+			metricsTypeVal := defaultMetricsType
+			for _, action := range interaction.ActionCallback.AttachmentActions {
+				switch action.Name {
+				case "duration":
+					durationVal = action.SelectedOptions[0].Value
+				case "metrics":
+					metricsTypeVal = action.SelectedOptions[0].Value
+				}
+			}
+
+			svc, ok := h.memory.Get(interaction.User.ID)
+			if !ok {
+				channelProjects := h.config.GetProjectsForChannel(interaction.Channel.ID)
+				return h.listResourcesForChannel(ctx, interaction.Channel.ID, ActionIdMetricsResource, channelProjects)
+			}
+			duration, err := time.ParseDuration(durationVal)
+			if err != nil {
+				return err
+			}
+			aggregationPeriod, ok := durationAggregationPeriodMap[durationVal]
+			if !ok {
+				aggregationPeriod = defaultAggregationPeriod
+			}
+			return h.getResourceMetrics(ctx, interaction.Channel.ID, svc, metricsTypeVal, duration, aggregationPeriod)
+		}
+	}
+	return fmt.Errorf("unsupported interaction %v", interaction.Type)
+}
+
+func (h *MultiProjectSlackEventHandler) listResourcesForChannel(ctx context.Context, channel, actionId string, channelProjects []string) error {
+	// If channel has exactly one project, list only that project's resources
+	if len(channelProjects) == 1 {
+		return h.listSingleProjectResources(ctx, channel, actionId, channelProjects[0])
+	}
+	// If channel has multiple projects or no specific projects, list all or filtered resources
+	return h.listAllProjects(ctx, channel, actionId)
+}
+
+func (h *MultiProjectSlackEventHandler) listSingleProjectResources(ctx context.Context, channel, actionId, projectID string) error {
+	rClient, ok := h.rClients[projectID]
+	if !ok {
+		log.Printf("Warning: No client found for project %s", projectID)
+		return h.listAllProjects(ctx, channel, actionId)
+	}
+
+	options := []*slack.OptionBlockObject{}
+
+	// Get services for this project
+	svcNames, err := rClient.ListServices(ctx)
+	if err != nil {
+		log.Printf("Error listing services for project %s: %v", projectID, err)
+		return h.listAllProjects(ctx, channel, actionId)
+	}
+
+	for _, svcName := range svcNames {
+		displayName := fmt.Sprintf("[SVC] %s", svcName) // No need to show project ID
+		value := fmt.Sprintf("%s:service:%s", projectID, svcName)
+		options = append(options, &slack.OptionBlockObject{
+			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Value: value,
+		})
+	}
+
+	// Get jobs for this project
+	jobNames, err := rClient.ListJobs(ctx)
+	if err != nil {
+		log.Printf("Error listing jobs for project %s: %v", projectID, err)
+		return h.listAllProjects(ctx, channel, actionId)
+	}
+
+	for _, jobName := range jobNames {
+		displayName := fmt.Sprintf("[JOB] %s", jobName) // No need to show project ID
+		value := fmt.Sprintf("%s:job:%s", projectID, jobName)
+		options = append(options, &slack.OptionBlockObject{
+			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Value: value,
+		})
+	}
+
+	if len(options) == 0 {
+		_, _, err := h.client.PostMessageContext(ctx, channel,
+			slack.MsgOptionText(fmt.Sprintf("No Cloud Run services or jobs found in project %s.", projectID), false))
+		return err
+	}
+
+	_, _, err = h.client.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
+		slack.SectionBlock{
+			Type: slack.MBTSection,
+			Text: &slack.TextBlockObject{
+				Type: slack.PlainTextType,
+				Text: fmt.Sprintf("Please select a Cloud Run service or job (Project: %s).", projectID),
+			},
+			Accessory: &slack.Accessory{
+				SelectElement: &slack.SelectBlockElement{
+					ActionID: actionId,
+					Type:     slack.OptTypeStatic,
+					Placeholder: &slack.TextBlockObject{
+						Type: slack.PlainTextType,
+						Text: "Select a resource",
+					},
+					Options: options,
+				},
+			},
+		},
+	))
+	return err
+}
+
+func (h *MultiProjectSlackEventHandler) listAllProjects(ctx context.Context, channel, actionId string) error {
+	options := []*slack.OptionBlockObject{}
+
+	for _, project := range h.config.Projects {
+		rClient, ok := h.rClients[project.ID]
+		if !ok {
+			log.Printf("Warning: No client found for project %s", project.ID)
+			continue
+		}
+
+		// Get services for this project
+		svcNames, err := rClient.ListServices(ctx)
+		if err != nil {
+			log.Printf("Error listing services for project %s: %v", project.ID, err)
+			continue
+		}
+
+		for _, svcName := range svcNames {
+			displayName := fmt.Sprintf("[%s] [SVC] %s", project.ID, svcName)
+			value := fmt.Sprintf("%s:service:%s", project.ID, svcName)
+			options = append(options, &slack.OptionBlockObject{
+				Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+				Value: value,
+			})
+		}
+
+		// Get jobs for this project
+		jobNames, err := rClient.ListJobs(ctx)
+		if err != nil {
+			log.Printf("Error listing jobs for project %s: %v", project.ID, err)
+			continue
+		}
+
+		for _, jobName := range jobNames {
+			displayName := fmt.Sprintf("[%s] [JOB] %s", project.ID, jobName)
+			value := fmt.Sprintf("%s:job:%s", project.ID, jobName)
+			options = append(options, &slack.OptionBlockObject{
+				Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+				Value: value,
+			})
+		}
+	}
+
+	if len(options) == 0 {
+		_, _, err := h.client.PostMessageContext(ctx, channel,
+			slack.MsgOptionText("No Cloud Run services or jobs found in any configured project.", false))
+		return err
+	}
+
+	_, _, err := h.client.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
+		slack.SectionBlock{
+			Type: slack.MBTSection,
+			Text: &slack.TextBlockObject{
+				Type: slack.PlainTextType,
+				Text: "Please select a Cloud Run service or job.",
+			},
+			Accessory: &slack.Accessory{
+				SelectElement: &slack.SelectBlockElement{
+					ActionID: actionId,
+					Type:     slack.OptTypeStatic,
+					Placeholder: &slack.TextBlockObject{
+						Type: slack.PlainTextType,
+						Text: "Select a resource",
+					},
+					Options: options,
+				},
+			},
+		},
+	))
+	return err
+}
+
+func (h *MultiProjectSlackEventHandler) describeResource(ctx context.Context, channelId, resourceValue string) error {
+	parts := strings.SplitN(resourceValue, ":", 3)
+	if len(parts) != 3 {
+		return fmt.Errorf("invalid resource format: %s", resourceValue)
+	}
+	projectID := parts[0]
+	resourceType := parts[1]
+	resourceName := parts[2]
+
+	rClient, ok := h.rClients[projectID]
+	if !ok {
+		return fmt.Errorf("no client found for project %s", projectID)
+	}
+
+	if resourceType == "job" {
+		return h.describeJobForProject(ctx, channelId, resourceName, rClient)
+	}
+	return h.describeServiceForProject(ctx, channelId, resourceName, rClient)
+}
+
+func (h *MultiProjectSlackEventHandler) getResourceMetrics(ctx context.Context, channelId, resourceValue, metricsType string, duration, aggregationPeriod time.Duration) error {
+	parts := strings.SplitN(resourceValue, ":", 3)
+	if len(parts) != 3 {
+		return fmt.Errorf("invalid resource format: %s", resourceValue)
+	}
+	projectID := parts[0]
+	resourceType := parts[1]
+	resourceName := parts[2]
+
+	if resourceType == "job" {
+		// Jobs don't have metrics like services, show job description instead
+		rClient, ok := h.rClients[projectID]
+		if !ok {
+			return fmt.Errorf("no client found for project %s", projectID)
+		}
+		return h.describeJobForProject(ctx, channelId, resourceName, rClient)
+	}
+
+	mClient, ok := h.mClients[projectID]
+	if !ok {
+		return fmt.Errorf("no monitoring client found for project %s", projectID)
+	}
+
+	rClient, ok := h.rClients[projectID]
+	if !ok {
+		return fmt.Errorf("no cloud run client found for project %s", projectID)
+	}
+
+	return h.getServiceMetricsForProject(ctx, channelId, resourceName, metricsType, duration, aggregationPeriod, mClient, rClient)
+}
+
+func (h *MultiProjectSlackEventHandler) setCurrentResource(ctx context.Context, channelId, userId, resourceValue, resourceType string) error {
+	h.memory.Set(userId, resourceValue, resourceType)
+	parts := strings.SplitN(resourceValue, ":", 3)
+	if len(parts) == 3 {
+		projectID := parts[0]
+		resourceName := parts[2]
+		_, err := h.client.PostEphemeralContext(ctx, channelId, userId, 
+			slack.MsgOptionText(fmt.Sprintf("current %s is set to %s in project %s", resourceType, resourceName, projectID), false))
+		return err
+	}
+	_, err := h.client.PostEphemeralContext(ctx, channelId, userId, 
+		slack.MsgOptionText(fmt.Sprintf("current %s is set to %s", resourceType, resourceValue), false))
+	return err
+}
+
+func (h *MultiProjectSlackEventHandler) describeServiceForProject(ctx context.Context, channelId, svcName string, rClient *cloudrun.Client) error {
+	msgOptions := []slack.MsgOption{}
+	svc, err := rClient.GetService(ctx, svcName)
+	if err != nil {
+		msgOptions = append(msgOptions, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
+	} else {
+		msgOptions = append(msgOptions, slack.MsgOptionAttachments(slack.Attachment{
+			Fields: []slack.AttachmentField{
+				{
+					Title: "Name",
+					Value: svc.Name,
+					Short: true,
+				},
+				{
+					Title: "LatestRevision",
+					Value: svc.LatestRevision,
+					Short: true,
+				},
+				{
+					Title: "Image",
+					Value: svc.Image,
+					Short: true,
+				},
+				{
+					Title: "LastModifier",
+					Value: svc.LastModifier,
+					Short: true,
+				},
+				{
+					Title: "UpdateTime",
+					Value: svc.UpdateTime.Format("2006/01/02 15:04:05"),
+					Short: true,
+				},
+				{
+					Title: "Resource Limit",
+					Value: fmt.Sprintf("- cpu:%s\n- memory:%s", svc.ResourceLimits["cpu"], svc.ResourceLimits["memory"]),
+					Short: true,
+				},
+			},
+		}))
+	}
+	_, _, err = h.client.PostMessageContext(ctx, channelId, msgOptions...)
+	return err
+}
+
+func (h *MultiProjectSlackEventHandler) describeJobForProject(ctx context.Context, channelId, jobName string, rClient *cloudrun.Client) error {
+	msgOptions := []slack.MsgOption{}
+	job, err := rClient.GetJob(ctx, jobName)
+	if err != nil {
+		msgOptions = append(msgOptions, slack.MsgOptionText("Failed to get job: "+err.Error(), false))
+	} else {
+		msgOptions = append(msgOptions, slack.MsgOptionAttachments(slack.Attachment{
+			Fields: []slack.AttachmentField{
+				{
+					Title: "Name",
+					Value: job.Name,
+					Short: true,
+				},
+				{
+					Title: "Image",
+					Value: job.Image,
+					Short: true,
+				},
+				{
+					Title: "LastModifier",
+					Value: job.LastModifier,
+					Short: true,
+				},
+				{
+					Title: "UpdateTime",
+					Value: job.UpdateTime.Format("2006/01/02 15:04:05"),
+					Short: true,
+				},
+				{
+					Title: "Resource Limit",
+					Value: fmt.Sprintf("- cpu:%s\n- memory:%s", job.ResourceLimits["cpu"], job.ResourceLimits["memory"]),
+					Short: true,
+				},
+				{
+					Title: "Console URL",
+					Value: fmt.Sprintf("<%s|Cloud Run Job>", job.GetYamlUrl()),
+					Short: true,
+				},
+			},
+		}))
+	}
+	_, _, err = h.client.PostMessageContext(ctx, channelId, msgOptions...)
+	return err
+}
+
+func (h *MultiProjectSlackEventHandler) getServiceMetricsForProject(ctx context.Context, channelId, svcName, metricsType string, duration, aggregationPeriod time.Duration, mClient *monitoring.Client, rClient *cloudrun.Client) error {
+	now := time.Now().UTC()
+	endTime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
+	startTime := endTime.Add(-1 * duration).UTC()
+	
+	var seriesMap *monitoring.TimeSeriesMap
+	var err error
+	var title string
+	
+	if metricsType == "latency" {
+		title = "Request Latency"
+		seriesMap, err = mClient.GetCloudRunServiceRequestLatencies(ctx, svcName, aggregationPeriod, startTime, endTime)
+	} else {
+		title = "Request Count"
+		seriesMap, err = mClient.GetCloudRunServiceRequestCount(ctx, svcName, aggregationPeriod, startTime, endTime)
+	}
+
+	if err != nil {
+		_, _, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
+		return err
+	}
+	
+	if len(*seriesMap) == 0 {
+		svc, err := rClient.GetService(ctx, svcName)
+		if err != nil {
+			return err
+		}
+		_, _, err = h.client.PostMessageContext(ctx, channelId,
+			slack.MsgOptionText(fmt.Sprintf("No requests found for last %s. Please check <%s|%s>\n", duration, svc.GetMetricsUrl(), "Cloud Run metrics (GCP Console)"), false),
+		)
+		return err
+	}
+
+	log.Println("visualizing")
+	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
+	log.Printf("imgName: %s\n", imgName)
+
+	size, err := visualize.Visualize(title, imgName, startTime, endTime, aggregationPeriod, seriesMap)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	
+	file, err := os.Open(imgName)
+	if err != nil {
+		return err
+	}
+
+	_, err = h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+		Reader:   file,
+		FileSize: int(size),
+		Filename: imgName,
+		Channel:  channelId,
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	fields := []slack.AttachmentField{}
+	for k, v := range *seriesMap {
+		var total int64
+		for _, p := range v {
+			total += int64(p.Val)
+		}
+		fields = append(fields, slack.AttachmentField{
+			Title: k,
+			Value: fmt.Sprint(total),
+			Short: true,
+		})
+	}
+
+	attachment := slack.Attachment{
+		Text:       title,
+		Fields:     fields,
+		Color:      "good",
+		CallbackID: ActionIdMetrics,
+		Actions: []slack.AttachmentAction{
+			{
+				Name: "duration",
+				Text: "Duration",
+				Type: "select",
+				Options: []slack.AttachmentActionOption{
+					{
+						Text:  "1h",
+						Value: "1h",
+					},
+					{
+						Text:  "1d",
+						Value: "24h",
+					},
+					{
+						Text:  "1w",
+						Value: "168h",
+					},
+				},
+			},
+			{
+				Name: "metrics",
+				Text: "Metrics",
+				Type: "select",
+				Options: []slack.AttachmentActionOption{
+					{
+						Text:  "latency",
+						Value: "latency",
+					},
+					{
+						Text:  "count",
+						Value: "count",
+					},
+				},
+			},
+		},
+	}
+	_, _, err = h.client.PostMessageContext(
+		ctx, channelId,
+		slack.MsgOptionText(fmt.Sprintf("`%s`", svcName), false),
+		slack.MsgOptionAttachments(attachment),
+	)
+	return err
+}
+
+func (h *MultiProjectSlackEventHandler) sample(ctx context.Context, channelId string) error {
+	imgName := path.Join(h.tmpDir, "sample.png")
+	err := visualize.VisualizeSample(imgName)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(imgName)
+	if err != nil {
+		return err
+	}
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	fSummary, err := h.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+		Reader:   file,
+		FileSize: int(stat.Size()),
+		Filename: imgName,
+		Channel:  channelId,
+	})
+	log.Println(fSummary)
+	return err
+}
+
+func (h *MultiProjectSlackEventHandler) help(ctx context.Context, channelId, userId string) error {
+	attachment := slack.Attachment{
+		Text: "Available commands (Multi-Project Mode):",
+		Fields: []slack.AttachmentField{
+			{
+				Title: "`describe` or `d`",
+				Value: "describe the target Cloud Run service or job from any configured project.\n you can check the latest revision, last modifier, update time, etc.",
+			},
+			{
+				Title: "`metrics` or `m`",
+				Value: "show the request count of the target Cloud Run service or job description.\n for services, you can check the request count per revision across all projects.",
+			},
+			{
+				Title: "`set` or `s`",
+				Value: "set the target Cloud Run service or job from any configured project.\n this displays a list of both services and jobs from all projects to select from.",
+			},
+		},
+	}
+	_, err := h.client.PostEphemeralContext(
+		ctx, channelId, userId,
+		slack.MsgOptionText("Usage: @<slack app> <command> e.g. `@cloud-run-bot describe`", false),
+		slack.MsgOptionAttachments(attachment),
+	)
 	return err
 }

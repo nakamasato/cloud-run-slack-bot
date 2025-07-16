@@ -3,79 +3,76 @@ package main
 import (
 	"context"
 	"log"
-	"os"
-	"strings"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrunslackbot"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 )
 
 func main() {
-	var err error
-	project := os.Getenv("PROJECT")
-	if project == "" {
-		log.Fatal("PROJECT env var is required")
-	}
-	region := os.Getenv("REGION")
-	if region == "" {
-		log.Fatal("REGION env var is required")
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	mClient, err := monitoring.NewMonitoringClient(project)
-	if err != nil {
-		log.Fatal(err)
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Configuration validation failed: %v", err)
 	}
+
+	// Log configuration
+	cfg.LogConfiguration()
+
+	ctx := context.Background()
+	
+	// Initialize clients for all projects
+	rClients := make(map[string]*cloudrun.Client)
+	mClients := make(map[string]*monitoring.Client)
+	
+	for _, project := range cfg.Projects {
+		// Create monitoring client for this project
+		mClient, err := monitoring.NewMonitoringClient(project.ID)
+		if err != nil {
+			log.Fatalf("Failed to create monitoring client for project %s: %v", project.ID, err)
+		}
+		mClients[project.ID] = mClient
+		
+		// Create Cloud Run client for this project
+		rClient, err := cloudrun.NewClient(ctx, project.ID, project.Region)
+		if err != nil {
+			log.Fatalf("Failed to create Cloud Run client for project %s: %v", project.ID, err)
+		}
+		rClients[project.ID] = rClient
+	}
+
+	// Ensure proper cleanup
 	defer func() {
-		if err := mClient.Close(); err != nil {
-			log.Printf("Failed to close monitoring client: %v", err)
+		for projectID, mClient := range mClients {
+			if err := mClient.Close(); err != nil {
+				log.Printf("Failed to close monitoring client for project %s: %v", projectID, err)
+			}
 		}
 	}()
 
-	ctx := context.Background()
-	rClient, err := cloudrun.NewClient(ctx, project, region)
-	if err != nil {
-		log.Fatalf("Failed to create run service: %v", err)
-	}
-
+	// Setup Slack client
 	ops := []slack.Option{}
-
-	if appToken := os.Getenv("SLACK_APP_TOKEN"); appToken != "" {
-		ops = append(ops, slack.OptionAppLevelToken(appToken))
+	if cfg.SlackAppToken != "" {
+		ops = append(ops, slack.OptionAppLevelToken(cfg.SlackAppToken))
 	}
+	sClient := slack.New(cfg.SlackBotToken, ops...)
+	
+	// Create multi-project handler
+	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, cfg.TmpDir, cfg)
 
-	sClient := slack.New(os.Getenv("SLACK_BOT_TOKEN"), ops...)
-	handler := slackinternal.NewSlackEventHandler(sClient, rClient, mClient, os.Getenv("TMP_DIR"))
-	signingSecret := os.Getenv("SLACK_SIGNING_SECRET")
-	if signingSecret == "" && os.Getenv("SLACK_APP_MODE") != "socket" {
-		log.Fatal("SLACK_SIGNING_SECRET env var is required for HTTP mode")
-	}
-
-	// Parse service-channel mapping from environment variable
-	// Format: service1:channel1,service2:channel2
-	serviceChannelMapping := make(map[string]string)
-	serviceChannelStr := os.Getenv("SERVICE_CHANNEL_MAPPING")
-	if serviceChannelStr != "" {
-		pairs := strings.Split(serviceChannelStr, ",")
-		for _, pair := range pairs {
-			parts := strings.Split(pair, ":")
-			if len(parts) == 2 {
-				serviceChannelMapping[parts[0]] = parts[1]
-			}
-		}
-	}
-
-	defaultChannel := os.Getenv("SLACK_CHANNEL")
-
-	svc := cloudrunslackbot.NewCloudRunSlackBotService(
+	// Create service with multi-project support
+	svc := cloudrunslackbot.NewMultiProjectCloudRunSlackBotService(
 		sClient,
-		serviceChannelMapping,
-		defaultChannel,
-		os.Getenv("SLACK_APP_MODE"),
+		cfg,
 		handler,
-		signingSecret,
 	)
 	svc.Run()
 }

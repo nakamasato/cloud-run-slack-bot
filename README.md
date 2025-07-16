@@ -6,7 +6,112 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 
 ## Architecture
 
-![](docs/diagram.drawio.svg)
+```mermaid
+graph TB
+    %% External Systems
+    subgraph "External Systems"
+        SLACK[Slack Workspace]
+    end
+
+    %% Cloud Run Slack Bot
+    subgraph "Cloud Run Slack Bot"
+        subgraph "Service Layer"
+            HTTP[HTTP Service<br/>cloudrunslackbot_http.go]
+            SOCKET[Socket Service<br/>cloudrunslackbot_socket.go]
+        end
+        
+        subgraph "Core Components"
+            CONFIG[Configuration<br/>config.go]
+            HANDLER[Multi-Project Handler<br/>event_handler.go]
+            MEMORY[User Memory<br/>Thread-safe Context]
+        end
+        
+        subgraph "GCP Clients"
+            CRUNCLIENT[Cloud Run Client<br/>cloudrun.go]
+            MONCLIENT[Monitoring Client<br/>client.go]
+        end
+        
+        subgraph "Processing"
+            VISUALIZE[Chart Generator<br/>visualize.go]
+            PUBSUBHANDLER[Audit Log Handler<br/>handler.go]
+        end
+    end
+
+    %% Google Cloud Platform
+    subgraph "Google Cloud Platform"
+        SERVICES[Cloud Run Services]
+        JOBS[Cloud Run Jobs]
+        MONITORING[Cloud Monitoring API]
+        AUDITLOGS[Cloud Audit Logs]
+        PUBSUB[Cloud Pub/Sub]
+    end
+
+    %% User Interactions
+    SLACK -->|App Mentions & Interactions| HTTP
+    SLACK -->|Socket Mode Events| SOCKET
+    
+    %% Service Layer Processing
+    HTTP --> HANDLER
+    SOCKET --> HANDLER
+    
+    %% Configuration & Memory
+    CONFIG --> HANDLER
+    HANDLER --> MEMORY
+    
+    %% GCP API Calls
+    HANDLER --> CRUNCLIENT
+    HANDLER --> MONCLIENT
+    HANDLER --> VISUALIZE
+    
+    %% External API Interactions
+    CRUNCLIENT --> SERVICES
+    CRUNCLIENT --> JOBS
+    MONCLIENT --> MONITORING
+    
+    %% Audit Log Flow
+    AUDITLOGS --> PUBSUB
+    PUBSUB -->|HTTP Webhook| PUBSUBHANDLER
+    
+    %% Response Generation
+    VISUALIZE -->|Chart Images| SLACK
+    HANDLER -->|Messages & Attachments| SLACK
+    PUBSUBHANDLER -->|Audit Notifications| SLACK
+    
+    %% Command Flow Examples
+    subgraph "Command Examples"
+        CMD1["@bot describe myservice"]
+        CMD2["@bot metrics myservice"]
+        CMD3["@bot set myservice"]
+    end
+    
+    CMD1 --> HANDLER
+    CMD2 --> HANDLER
+    CMD3 --> HANDLER
+
+    %% Styling
+    classDef external fill:#e1f5fe
+    classDef service fill:#fff3e0
+    classDef core fill:#f3e5f5
+    classDef gcp fill:#e8f5e8
+    classDef processing fill:#fce4ec
+    
+    class SLACK external
+    class HTTP,SOCKET service
+    class CONFIG,HANDLER,MEMORY core
+    class CRUNCLIENT,MONCLIENT gcp
+    class VISUALIZE,PUBSUBHANDLER processing
+    class SERVICES,JOBS,MONITORING,AUDITLOGS,PUBSUB gcp
+```
+
+### Component Descriptions
+
+- **Service Layer**: Handles HTTP webhooks and Socket Mode connections from Slack
+- **Multi-Project Handler**: Processes commands and manages user context across multiple GCP projects
+- **Configuration**: Manages multi-project settings and channel routing
+- **User Memory**: Thread-safe storage for user context and selected resources
+- **GCP Clients**: Abstraction layer for Cloud Run and Monitoring APIs
+- **Chart Generator**: Creates PNG visualizations for metrics data
+- **Audit Log Handler**: Processes real-time Cloud Run audit logs from Pub/Sub
 
 ## Features
 
