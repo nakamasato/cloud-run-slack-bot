@@ -8,9 +8,13 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 
 ```mermaid
 graph TB
-    %% External Systems
-    subgraph "External Systems"
-        SLACK[Slack Workspace]
+    %% Slack
+    subgraph "Slack"
+        SLACK["Slack App<br/>Event API & Interaction"]
+        CMD1["@bot describe myservice"]
+        CMD2["@bot metrics myservice"]
+        CMD3["@bot set myservice"]
+        SLACKMSG["Slack Message"]
     end
 
     %% Cloud Run Slack Bot
@@ -27,7 +31,7 @@ graph TB
             DETECTOR[Channel-Based Project Detection<br/>Auto-routing logic]
         end
 
-        subgraph "GCP Clients (Per Project)"
+        subgraph "GCP Clients"
             CRUNCLIENT[Cloud Run Client<br/>cloudrun.go]
             MONCLIENT[Monitoring Client<br/>client.go]
         end
@@ -38,32 +42,19 @@ graph TB
         end
     end
 
-    %% Google Cloud Platform - Multi-Project
-    subgraph "Project 1"
-        SERVICES1[Cloud Run Services]
-        JOBS1[Cloud Run Jobs]
-        MONITORING1[Cloud Monitoring API]
-        AUDITLOGS1[Cloud Audit Logs]
-        PUBSUB1[Cloud Pub/Sub]
-    end
-
-    subgraph "Project 2"
-        SERVICES2[Cloud Run Services]
-        JOBS2[Cloud Run Jobs]
-        MONITORING2[Cloud Monitoring API]
-        AUDITLOGS2[Cloud Audit Logs]
-        PUBSUB2[Cloud Pub/Sub]
-    end
-
-    subgraph "Project N"
-        SERVICESN[Cloud Run Services]
-        JOBSN[Cloud Run Jobs]
-        MONITORINGN[Cloud Monitoring API]
-        AUDITLOGSN[Cloud Audit Logs]
-        PUBSUBN[Cloud Pub/Sub]
+    %% Google Cloud Platform
+    subgraph "Monitored Project(s)"
+        SERVICES[Cloud Run Services]
+        JOBS[Cloud Run Jobs]
+        MONITORING[Cloud Monitoring API]
+        AUDITLOGS[Cloud Audit Logs]
+        PUBSUB[Cloud Pub/Sub]
     end
 
     %% User Interactions
+    CMD1 -->|App Mention| SLACK
+    CMD2 -->|App Mention| SLACK
+    CMD3 -->|App Mention| SLACK
     SLACK -->|App Mentions & Interactions| HTTP
     SLACK -->|Socket Mode Events| SOCKET
 
@@ -76,48 +67,24 @@ graph TB
     HANDLER --> MEMORY
     HANDLER --> DETECTOR
 
-    %% GCP API Calls (Multi-Project)
+    %% GCP API Calls
     HANDLER --> CRUNCLIENT
     HANDLER --> MONCLIENT
     HANDLER --> VISUALIZE
 
-    %% External API Interactions (Multi-Project)
-    CRUNCLIENT --> SERVICES1
-    CRUNCLIENT --> JOBS1
-    CRUNCLIENT --> SERVICES2
-    CRUNCLIENT --> JOBS2
-    CRUNCLIENT --> SERVICESN
-    CRUNCLIENT --> JOBSN
+    %% External API Interactions
+    CRUNCLIENT --> SERVICES
+    CRUNCLIENT --> JOBS
+    MONCLIENT --> MONITORING
 
-    MONCLIENT --> MONITORING1
-    MONCLIENT --> MONITORING2
-    MONCLIENT --> MONITORINGN
-
-    %% Audit Log Flow (Multi-Project)
-    AUDITLOGS1 --> PUBSUB1
-    AUDITLOGS2 --> PUBSUB2
-    AUDITLOGSN --> PUBSUBN
-    PUBSUB1 -->|HTTP Webhook| PUBSUBHANDLER
-    PUBSUB2 -->|HTTP Webhook| PUBSUBHANDLER
-    PUBSUBN -->|HTTP Webhook| PUBSUBHANDLER
+    %% Audit Log Flow
+    AUDITLOGS --> PUBSUB
+    PUBSUB -->|HTTP Webhook| PUBSUBHANDLER
 
     %% Response Generation
-    VISUALIZE -->|Chart Images| SLACK
-    HANDLER -->|Messages & Attachments| SLACK
-    PUBSUBHANDLER -->|Project-Specific Notifications| SLACK
-
-    %% Command Flow Examples
-    subgraph "Command Examples"
-        CMD1["@bot describe myservice"]
-        CMD2["@bot metrics myservice"]
-        CMD3["@bot set myservice"]
-        CMD4["Channel-based Auto-Detection"]
-    end
-
-    CMD1 --> HANDLER
-    CMD2 --> HANDLER
-    CMD3 --> HANDLER
-    CMD4 --> DETECTOR
+    VISUALIZE -->|Chart Images| SLACKMSG
+    HANDLER -->|Messages & Attachments| SLACKMSG
+    PUBSUBHANDLER -->|Audit Notifications| SLACKMSG
 
     %% Styling
     classDef external fill:#e1f5fe
@@ -125,16 +92,13 @@ graph TB
     classDef core fill:#f3e5f5
     classDef gcp fill:#e8f5e8
     classDef processing fill:#fce4ec
-    classDef multiproject fill:#f0f8ff
 
-    class SLACK external
+    class SLACK,CMD1,CMD2,CMD3 external
     class HTTP,SOCKET service
     class CONFIG,HANDLER,MEMORY,DETECTOR core
     class CRUNCLIENT,MONCLIENT gcp
     class VISUALIZE,PUBSUBHANDLER processing
-    class SERVICES1,JOBS1,MONITORING1,AUDITLOGS1,PUBSUB1 multiproject
-    class SERVICES2,JOBS2,MONITORING2,AUDITLOGS2,PUBSUB2 multiproject
-    class SERVICESN,JOBSN,MONITORINGN,AUDITLOGSN,PUBSUBN multiproject
+    class SERVICES,JOBS,MONITORING,AUDITLOGS,PUBSUB gcp
 ```
 
 ### Component Descriptions
