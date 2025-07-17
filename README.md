@@ -6,15 +6,135 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 
 ## Architecture
 
-![](docs/diagram.drawio.svg)
+```mermaid
+graph TB
+    %% Slack
+    subgraph "Slack"
+        SLACK["Slack App<br/>Event API & Interaction"]
+        CMD1["@bot describe myservice"]
+        CMD2["@bot metrics myservice"]
+        CMD3["@bot set myservice"]
+        SLACKMSG["Slack Message"]
+    end
+
+    %% Cloud Run Slack Bot
+    subgraph "Cloud Run Slack Bot"
+        subgraph "Service Layer"
+            HTTP[HTTP Service<br/>cloudrunslackbot_http.go]
+            SOCKET[Socket Service<br/>cloudrunslackbot_socket.go]
+        end
+
+        subgraph "Core Components"
+            CONFIG[Multi-Project Configuration<br/>config.go]
+            HANDLER[Multi-Project Handler<br/>event_handler.go]
+            MEMORY[User Memory<br/>Thread-safe Context]
+            DETECTOR[Channel-Based Project Detection<br/>Auto-routing logic]
+        end
+
+        subgraph "GCP Clients"
+            CRUNCLIENT[Cloud Run Client<br/>cloudrun.go]
+            MONCLIENT[Monitoring Client<br/>client.go]
+        end
+
+        subgraph "Processing"
+            VISUALIZE[Chart Generator<br/>visualize.go]
+            PUBSUBHANDLER[Audit Log Handler<br/>handler.go]
+        end
+    end
+
+    %% Google Cloud Platform
+    subgraph "Monitored Project(s)"
+        SERVICES[Cloud Run Services]
+        JOBS[Cloud Run Jobs]
+        MONITORING[Cloud Monitoring API]
+        AUDITLOGS[Cloud Audit Logs]
+        PUBSUB[Cloud Pub/Sub]
+    end
+
+    %% User Interactions
+    CMD1 -->|App Mention| SLACK
+    CMD2 -->|App Mention| SLACK
+    CMD3 -->|App Mention| SLACK
+    SLACK -->|App Mentions & Interactions| HTTP
+    SLACK -->|Socket Mode Events| SOCKET
+
+    %% Service Layer Processing
+    HTTP --> HANDLER
+    SOCKET --> HANDLER
+
+    %% Configuration & Memory
+    CONFIG --> HANDLER
+    HANDLER --> MEMORY
+    HANDLER --> DETECTOR
+
+    %% GCP API Calls
+    HANDLER --> CRUNCLIENT
+    HANDLER --> MONCLIENT
+    HANDLER --> VISUALIZE
+
+    %% External API Interactions
+    CRUNCLIENT --> SERVICES
+    CRUNCLIENT --> JOBS
+    MONCLIENT --> MONITORING
+
+    %% Audit Log Flow
+    AUDITLOGS --> PUBSUB
+    PUBSUB -->|HTTP Webhook| PUBSUBHANDLER
+
+    %% Response Generation
+    VISUALIZE -->|Chart Images| SLACKMSG
+    HANDLER -->|Messages & Attachments| SLACKMSG
+    PUBSUBHANDLER -->|Audit Notifications| SLACKMSG
+
+    %% Styling
+    classDef external fill:#e1f5fe
+    classDef service fill:#fff3e0
+    classDef core fill:#f3e5f5
+    classDef gcp fill:#e8f5e8
+    classDef processing fill:#fce4ec
+
+    class SLACK,CMD1,CMD2,CMD3 external
+    class HTTP,SOCKET service
+    class CONFIG,HANDLER,MEMORY,DETECTOR core
+    class CRUNCLIENT,MONCLIENT gcp
+    class VISUALIZE,PUBSUBHANDLER processing
+    class SERVICES,JOBS,MONITORING,AUDITLOGS,PUBSUB gcp
+```
+
+### Component Descriptions
+
+- **Service Layer**: Handles HTTP webhooks and Socket Mode connections from Slack
+- **Multi-Project Handler**: Processes commands and manages user context across multiple GCP projects
+- **Configuration**: Manages multi-project settings and channel routing with automatic backward compatibility
+- **User Memory**: Thread-safe storage for user context and selected resources
+- **Channel-Based Project Detection**: Automatically detects target projects based on Slack channel configuration
+- **GCP Clients**: Abstraction layer for Cloud Run and Monitoring APIs with per-project client management
+- **Chart Generator**: Creates PNG visualizations for metrics data
+- **Audit Log Handler**: Processes real-time Cloud Run audit logs from Pub/Sub with project-specific routing
+
+### Backward Compatibility
+
+The bot maintains full backward compatibility with existing single-project deployments:
+
+- **Legacy Environment Variables**: Original `PROJECT`, `REGION`, and `SERVICE_CHANNEL_MAPPING` variables continue to work
+- **Existing Configurations**: No changes required for current deployments
+- **Seamless Migration**: Gradual migration path from single-project to multi-project setup
+- **Feature Parity**: All existing functionality remains unchanged
+
+For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
 
 ## Features
 
-1. Interact with Cloud Run resources on Slack.
-    1. Get metrics of Cloud Run service.
-    1. Describe Cloud Run service.
-    1. Describe Cloud Run job.
-1. Receive notification for Cloud Run audit logs on Slack.
+1. **Multi-Project Support**: Monitor Cloud Run services and jobs across multiple GCP projects with intelligent channel-based project detection
+2. **Interactive Slack Commands**: Interact with Cloud Run resources directly through Slack
+    - Get metrics of Cloud Run services
+    - Describe Cloud Run services and jobs
+    - Set target resources for quick access
+    - Auto-complete and selection for resources
+3. **Real-time Notifications**: Receive notifications for Cloud Run audit logs with project-specific routing
+4. **Metrics Visualization**: Generate PNG charts for Cloud Run service metrics
+5. **Channel-based Project Detection**: Automatically detect target projects based on Slack channel configuration
+6. **Backward Compatibility**: Full support for existing single-project deployments
 
 ## Cloud Run
 
@@ -25,15 +145,44 @@ This is a simple Slack bot running on Cloud Run with which you can interact with
 
 ### Environment Variables
 
+#### Multi-Project Configuration (Recommended)
+
+1. `PROJECTS_CONFIG`: JSON array of project configurations (see [Multi-Project Setup Guide](docs/multi-project-setup.md))
+   ```json
+   [
+     {
+       "id": "project1",
+       "region": "us-central1",
+       "defaultChannel": "project1-alerts",
+       "serviceChannels": {
+         "web-service": "web-team",
+         "api-service": "api-team"
+       }
+     },
+     {
+       "id": "project2",
+       "region": "us-east1",
+       "defaultChannel": "project2-alerts"
+     }
+   ]
+   ```
+
+#### Single-Project Configuration (Legacy - Still Supported)
+
 1. `PROJECT`: GCP Project ID to monitor
 1. `REGION`: GCP Region to monitor
+1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
+
+#### Common Configuration
+
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
 1. `SLACK_SIGNING_SECRET`: Slack bot signing secret
 1. `SLACK_APP_TOKEN` (optional): Slack oauth token (required for `SLACK_APP_MODE=socket`)
 1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
-1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
-1. `SLACK_CHANNEL`: Default Slack Channel ID to receive notification for Cloud Run audit logs (used when service is not specified in `SERVICE_CHANNEL_MAPPING`)
+1. `SLACK_CHANNEL`: Default Slack Channel ID to receive notifications (used as fallback for all configurations)
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
+
+> **Note**: When using `PROJECTS_CONFIG`, the bot automatically generates channel-to-project mappings for intelligent project detection. For detailed configuration options, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
 
 ### Deploy
 
@@ -65,7 +214,43 @@ gcloud projects add-iam-policy-binding $PROJECT \
 
 Deploy to Cloud Run
 
+#### Multi-Project Deployment (Recommended)
+
+```bash
+# Create PROJECTS_CONFIG environment variable
+PROJECTS_CONFIG='[
+  {
+    "id": "project1",
+    "region": "us-central1",
+    "defaultChannel": "project1-alerts",
+    "serviceChannels": {
+      "web-service": "web-team",
+      "api-service": "api-team"
+    }
+  },
+  {
+    "id": "project2",
+    "region": "us-east1",
+    "defaultChannel": "project2-alerts",
+    "serviceChannels": {
+      "batch-job": "batch-team"
+    }
+  }
+]'
+
+# Deploy with multi-project configuration
+gcloud run deploy cloud-run-slack-bot \
+    --set-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest" \
+    --set-env-vars "PROJECTS_CONFIG=$PROJECTS_CONFIG,SLACK_APP_MODE=http,TMP_DIR=/tmp,SLACK_CHANNEL=general" \
+    --image nakamasato/cloud-run-slack-bot:0.5.1 \
+    --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
+    --project "$PROJECT" --region "$REGION"
 ```
+
+#### Single-Project Deployment (Legacy)
+
+```bash
+# Traditional single-project deployment
 gcloud run deploy cloud-run-slack-bot \
     --set-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest" \
     --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp,SLACK_CHANNEL=general,SERVICE_CHANNEL_MAPPING=service1:channel1,service2:channel2" \
@@ -73,6 +258,8 @@ gcloud run deploy cloud-run-slack-bot \
     --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
     --project "$PROJECT" --region "$REGION"
 ```
+
+> **Note**: For comprehensive multi-project setup including IAM permissions and Pub/Sub configuration, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
 
 ## Slack App
 
@@ -99,5 +286,5 @@ gcloud run deploy cloud-run-slack-bot \
 
 ## More
 
-1. [Terraform](docs/terraform.md)
+1. [Multi-Project Setup Guide](docs/multi-project-setup.md)
 1. [Auditing Notification](docs/auditing.md)
