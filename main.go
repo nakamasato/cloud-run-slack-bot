@@ -56,6 +56,17 @@ func main() {
 			log.Printf("ERROR: Failed to list services for project %s: %v", project.ID, err)
 		} else {
 			log.Printf("SUCCESS: Listed %d services for project %s: %v", len(services), project.ID, services)
+
+			// Test GetService for each listed service
+			for _, serviceName := range services {
+				log.Printf("Testing GetService for service '%s' in project %s", serviceName, project.ID)
+				svc, err := rClient.GetService(ctx, serviceName)
+				if err != nil {
+					log.Printf("ERROR: Failed to get service '%s' in project %s: %v", serviceName, project.ID, err)
+				} else {
+					log.Printf("SUCCESS: Got service '%s' in project %s (revision: %s)", serviceName, project.ID, svc.LatestRevision)
+				}
+			}
 		}
 	}
 
