@@ -339,8 +339,10 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 		return err
 	}
 	if len(*seriesMap) == 0 {
+		log.Printf("DEBUG: Getting service '%s' for metrics URL (legacy handler)", svcName)
 		svc, err := h.rClient.GetService(ctx, svcName)
 		if err != nil {
+			log.Printf("ERROR: Failed to get service '%s' for metrics URL (legacy handler): %v", svcName, err)
 			return err
 		}
 		_, _, err = h.client.PostMessageContext(ctx, channelId,
@@ -458,8 +460,10 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 
 func (h *SlackEventHandler) describeService(ctx context.Context, channelId, svcName string) error {
 	msgOptions := []slack.MsgOption{}
+	log.Printf("DEBUG: Getting service '%s' using legacy single-project handler", svcName)
 	svc, err := h.rClient.GetService(ctx, svcName)
 	if err != nil {
+		log.Printf("ERROR: Failed to get service '%s' (legacy handler): %v", svcName, err)
 		msgOptions = append(msgOptions, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
 	} else {
 		msgOptions = append(msgOptions, slack.MsgOptionAttachments(slack.Attachment{
@@ -909,8 +913,10 @@ func (h *MultiProjectSlackEventHandler) setCurrentResource(ctx context.Context, 
 
 func (h *MultiProjectSlackEventHandler) describeServiceForProject(ctx context.Context, channelId, svcName string, rClient *cloudrun.Client) error {
 	msgOptions := []slack.MsgOption{}
+	log.Printf("DEBUG: Getting service '%s' for project (rClient initialized for specific project)", svcName)
 	svc, err := rClient.GetService(ctx, svcName)
 	if err != nil {
+		log.Printf("ERROR: Failed to get service '%s': %v", svcName, err)
 		msgOptions = append(msgOptions, slack.MsgOptionText("Failed to get service: "+err.Error(), false))
 	} else {
 		msgOptions = append(msgOptions, slack.MsgOptionAttachments(slack.Attachment{
@@ -1020,8 +1026,10 @@ func (h *MultiProjectSlackEventHandler) getServiceMetricsForProject(ctx context.
 	}
 
 	if len(*seriesMap) == 0 {
+		log.Printf("DEBUG: Getting service '%s' for metrics URL (multi-project handler)", svcName)
 		svc, err := rClient.GetService(ctx, svcName)
 		if err != nil {
+			log.Printf("ERROR: Failed to get service '%s' for metrics URL (multi-project handler): %v", svcName, err)
 			return err
 		}
 		_, _, err = h.client.PostMessageContext(ctx, channelId,
