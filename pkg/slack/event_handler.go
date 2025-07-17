@@ -78,6 +78,69 @@ func NewMemory() *Memory {
 	}
 }
 
+// ParseResourceValue parses and validates resource value format
+func ParseResourceValue(value string) (resourceType, resourceName string, err error) {
+	if value == "" {
+		return "", "", fmt.Errorf("resource value cannot be empty")
+	}
+
+	// Check if value contains the new format with type:name
+	if strings.Contains(value, ":") {
+		parts := strings.SplitN(value, ":", 2)
+		if len(parts) != 2 {
+			return "", "", fmt.Errorf("invalid resource format: expected 'type:name', got '%s'", value)
+		}
+		resourceType = parts[0]
+		resourceName = parts[1]
+	} else {
+		// Legacy format without type prefix
+		resourceType = "service" // Default
+		resourceName = value
+	}
+
+	// Validate resource type
+	if resourceType != "service" && resourceType != "job" {
+		return "", "", fmt.Errorf("invalid resource type: '%s', must be 'service' or 'job'", resourceType)
+	}
+
+	// Validate resource name
+	if resourceName == "" {
+		return "", "", fmt.Errorf("resource name cannot be empty")
+	}
+
+	return resourceType, resourceName, nil
+}
+
+// ParseMultiProjectResourceValue parses and validates multi-project resource value format
+func ParseMultiProjectResourceValue(value string) (projectID, resourceType, resourceName string, err error) {
+	if value == "" {
+		return "", "", "", fmt.Errorf("resource value cannot be empty")
+	}
+
+	// Parse project:resourceType:resourceName format
+	parts := strings.SplitN(value, ":", 3)
+	if len(parts) != 3 {
+		return "", "", "", fmt.Errorf("invalid resource format: expected 'project:type:name', got '%s'", value)
+	}
+
+	projectID = parts[0]
+	resourceType = parts[1]
+	resourceName = parts[2]
+
+	// Validate components
+	if projectID == "" {
+		return "", "", "", fmt.Errorf("project ID cannot be empty")
+	}
+	if resourceType != "service" && resourceType != "job" {
+		return "", "", "", fmt.Errorf("invalid resource type: '%s', must be 'service' or 'job'", resourceType)
+	}
+	if resourceName == "" {
+		return "", "", "", fmt.Errorf("resource name cannot be empty")
+	}
+
+	return projectID, resourceType, resourceName, nil
+}
+
 // SlackEventHandler handles slack events this is used by SlackEventService and SlackSocketService
 type SlackEventHandler struct {
 	// Slack Client
@@ -153,14 +216,9 @@ func (h *SlackEventHandler) HandleInteraction(interaction *slack.InteractionCall
 
 		// Parse resource type and name from the selected option value
 		value := action.SelectedOption.Value
-		resourceName := value
-		resourceType := "service" // Default
-
-		// Check if value contains the new format with type:name
-		if strings.Contains(value, ":") {
-			parts := strings.SplitN(value, ":", 2)
-			resourceType = parts[0]
-			resourceName = parts[1]
+		resourceType, resourceName, err := ParseResourceValue(value)
+		if err != nil {
+			return fmt.Errorf("failed to parse resource value: %v", err)
 		}
 
 		switch action.ActionID {
@@ -644,11 +702,12 @@ func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.Int
 		value := action.SelectedOption.Value
 
 		// Parse project:resourceType:resourceName format
-		parts := strings.SplitN(value, ":", 3)
-		if len(parts) != 3 {
-			return fmt.Errorf("invalid resource format: %s", value)
+		projectID, resourceType, resourceName, err := ParseMultiProjectResourceValue(value)
+		if err != nil {
+			return fmt.Errorf("failed to parse multi-project resource value: %v", err)
 		}
-		resourceType := parts[1]
+		_ = projectID // Used in action handlers below
+		_ = resourceName // Used in action handlers below
 
 		switch action.ActionID {
 		case ActionIdDescribeResource:
@@ -846,13 +905,10 @@ func (h *MultiProjectSlackEventHandler) listAllProjects(ctx context.Context, cha
 }
 
 func (h *MultiProjectSlackEventHandler) describeResource(ctx context.Context, channelId, resourceValue string) error {
-	parts := strings.SplitN(resourceValue, ":", 3)
-	if len(parts) != 3 {
-		return fmt.Errorf("invalid resource format: %s", resourceValue)
+	projectID, resourceType, resourceName, err := ParseMultiProjectResourceValue(resourceValue)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource value: %v", err)
 	}
-	projectID := parts[0]
-	resourceType := parts[1]
-	resourceName := parts[2]
 
 	rClient, ok := h.rClients[projectID]
 	if !ok {
@@ -866,13 +922,10 @@ func (h *MultiProjectSlackEventHandler) describeResource(ctx context.Context, ch
 }
 
 func (h *MultiProjectSlackEventHandler) getResourceMetrics(ctx context.Context, channelId, resourceValue, metricsType string, duration, aggregationPeriod time.Duration) error {
-	parts := strings.SplitN(resourceValue, ":", 3)
-	if len(parts) != 3 {
-		return fmt.Errorf("invalid resource format: %s", resourceValue)
+	projectID, resourceType, resourceName, err := ParseMultiProjectResourceValue(resourceValue)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource value: %v", err)
 	}
-	projectID := parts[0]
-	resourceType := parts[1]
-	resourceName := parts[2]
 
 	if resourceType == "job" {
 		// Jobs don't have metrics like services, show job description instead
@@ -898,16 +951,15 @@ func (h *MultiProjectSlackEventHandler) getResourceMetrics(ctx context.Context, 
 
 func (h *MultiProjectSlackEventHandler) setCurrentResource(ctx context.Context, channelId, userId, resourceValue, resourceType string) error {
 	h.memory.Set(userId, resourceValue, resourceType)
-	parts := strings.SplitN(resourceValue, ":", 3)
-	if len(parts) == 3 {
-		projectID := parts[0]
-		resourceName := parts[2]
+	projectID, _, resourceName, err := ParseMultiProjectResourceValue(resourceValue)
+	if err != nil {
+		// Fallback to legacy format
 		_, err := h.client.PostEphemeralContext(ctx, channelId, userId,
-			slack.MsgOptionText(fmt.Sprintf("current %s is set to %s in project %s", resourceType, resourceName, projectID), false))
+			slack.MsgOptionText(fmt.Sprintf("current %s is set to %s", resourceType, resourceValue), false))
 		return err
 	}
-	_, err := h.client.PostEphemeralContext(ctx, channelId, userId,
-		slack.MsgOptionText(fmt.Sprintf("current %s is set to %s", resourceType, resourceValue), false))
+	_, err = h.client.PostEphemeralContext(ctx, channelId, userId,
+		slack.MsgOptionText(fmt.Sprintf("current %s is set to %s in project %s", resourceType, resourceName, projectID), false))
 	return err
 }
 

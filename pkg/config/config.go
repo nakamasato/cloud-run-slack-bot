@@ -28,6 +28,25 @@ type Config struct {
 	TmpDir                string              `json:"-"`
 }
 
+// validateProjectsConfig validates the structure of the parsed projects configuration
+func validateProjectsConfig(projects []ProjectConfig) error {
+	if len(projects) == 0 {
+		return fmt.Errorf("at least one project must be configured")
+	}
+
+	for i, project := range projects {
+		if project.ID == "" {
+			return fmt.Errorf("project %d: project ID is required", i)
+		}
+		if project.Region == "" {
+			return fmt.Errorf("project %d: region is required", i)
+		}
+		// DefaultChannel is optional
+		// ServiceChannels is optional
+	}
+	return nil
+}
+
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	config := &Config{
@@ -44,6 +63,10 @@ func LoadConfig() (*Config, error) {
 	if projectsConfig := os.Getenv("PROJECTS_CONFIG"); projectsConfig != "" {
 		if err := json.Unmarshal([]byte(projectsConfig), &config.Projects); err != nil {
 			return nil, fmt.Errorf("failed to parse PROJECTS_CONFIG: %v", err)
+		}
+		// Validate the parsed configuration structure
+		if err := validateProjectsConfig(config.Projects); err != nil {
+			return nil, fmt.Errorf("invalid PROJECTS_CONFIG: %v", err)
 		}
 	} else {
 		// Fallback to single project configuration for backward compatibility

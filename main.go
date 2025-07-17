@@ -57,6 +57,11 @@ func main() {
 				log.Printf("Failed to close monitoring client for project %s: %v", projectID, err)
 			}
 		}
+		for projectID, rClient := range rClients {
+			if err := rClient.Close(); err != nil {
+				log.Printf("Failed to close Cloud Run client for project %s: %v", projectID, err)
+			}
+		}
 	}()
 
 	// Setup Slack client

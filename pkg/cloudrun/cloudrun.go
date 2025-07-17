@@ -13,6 +13,7 @@ import (
 type Client struct {
 	project                      string
 	region                       string
+	runService                   *run.Service
 	projectLocationServiceClient *run.ProjectsLocationsServicesService
 	projectLocationJobClient     *run.ProjectsLocationsJobsService
 }
@@ -98,9 +99,16 @@ func NewClient(ctx context.Context, project, region string) (*Client, error) {
 	return &Client{
 		project:                      project,
 		region:                       region,
+		runService:                   runService,
 		projectLocationServiceClient: plSvc,
 		projectLocationJobClient:     plJobSvc,
 	}, nil
+}
+
+// Close closes the underlying HTTP client
+func (c *Client) Close() error {
+	c.runService.BasePath = ""
+	return nil
 }
 
 func (c *Client) ListServices(ctx context.Context) ([]string, error) {
