@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/api/run/v2"
+	run "google.golang.org/api/run/v2"
 )
 
 type Client struct {
