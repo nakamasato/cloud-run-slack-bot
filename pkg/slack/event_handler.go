@@ -615,8 +615,10 @@ func (h *MultiProjectSlackEventHandler) HandleEvent(event *slackevents.EventsAPI
 		switch command {
 		case "describe", "d":
 			if !ok {
+				log.Printf("DEBUG: No current item for user %s, calling listResourcesForChannel", e.User)
 				return h.listResourcesForChannel(ctx, e.Channel, ActionIdDescribeResource, channelProjects)
 			}
+			log.Printf("DEBUG: Found current item for user %s: %s, calling describeResource", e.User, currentItem)
 			return h.describeResource(ctx, e.Channel, currentItem)
 		case "metrics", "m":
 			if !ok {
@@ -695,20 +697,25 @@ func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.Int
 }
 
 func (h *MultiProjectSlackEventHandler) listResourcesForChannel(ctx context.Context, channel, actionId string, channelProjects []string) error {
+	log.Printf("DEBUG: listResourcesForChannel called for channel %s with projects: %v", channel, channelProjects)
 	// If channel has exactly one project, list only that project's resources
 	if len(channelProjects) == 1 {
+		log.Printf("DEBUG: Single project detected (%s), calling listSingleProjectResources", channelProjects[0])
 		return h.listSingleProjectResources(ctx, channel, actionId, channelProjects[0])
 	}
 	// If channel has multiple projects or no specific projects, list all or filtered resources
+	log.Printf("DEBUG: Multiple/no projects detected (%d projects), calling listAllProjects", len(channelProjects))
 	return h.listAllProjects(ctx, channel, actionId)
 }
 
 func (h *MultiProjectSlackEventHandler) listSingleProjectResources(ctx context.Context, channel, actionId, projectID string) error {
+	log.Printf("DEBUG: listSingleProjectResources called for project %s", projectID)
 	rClient, ok := h.rClients[projectID]
 	if !ok {
 		log.Printf("Warning: No client found for project %s", projectID)
 		return h.listAllProjects(ctx, channel, actionId)
 	}
+	log.Printf("DEBUG: Found client for project %s, listing services and jobs", projectID)
 
 	options := []*slack.OptionBlockObject{}
 
@@ -745,10 +752,13 @@ func (h *MultiProjectSlackEventHandler) listSingleProjectResources(ctx context.C
 	}
 
 	if len(options) == 0 {
+		log.Printf("DEBUG: No options found for project %s", projectID)
 		_, _, err := h.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText(fmt.Sprintf("No Cloud Run services or jobs found in project %s.", projectID), false))
 		return err
 	}
+
+	log.Printf("DEBUG: Posting selection message with %d options for project %s", len(options), projectID)
 
 	_, _, err = h.client.PostMessageContext(ctx, channel, slack.MsgOptionBlocks(
 		slack.SectionBlock{
