@@ -135,11 +135,8 @@ func (c *Client) ListJobs(ctx context.Context) ([]string, error) {
 
 func (c *Client) GetService(ctx context.Context, serviceName string) (*CloudRunService, error) {
 	projLoc := c.getProjectLocation()
-	fullServiceName := fmt.Sprintf("%s/services/%s", projLoc, serviceName)
-	log.Printf("DEBUG: Attempting to get service: %s", fullServiceName)
-	res, err := c.projectLocationServiceClient.Get(fullServiceName).Context(ctx).Do()
+	res, err := c.projectLocationServiceClient.Get(fmt.Sprintf("%s/services/%s", projLoc, serviceName)).Context(ctx).Do()
 	if err != nil {
-		log.Printf("ERROR: Failed to get service %s: %v", fullServiceName, err)
 		return nil, err
 	}
 	fmt.Printf("Service: %+v\n", res)
