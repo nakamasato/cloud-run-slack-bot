@@ -1,30 +1,139 @@
-# Set up Cloud Run with Terraform
+# Multi-Project Cloud Run Slack Bot with Terraform
 
-## Create secret manager
+This guide shows how to set up the Cloud Run Slack Bot with multi-project support using Terraform. The bot will be deployed in a host project and monitor multiple target projects.
+
+## Architecture Overview
 
 ```
-echo -n "xoxb-xxxx" | gcloud secrets create slack-bot-token-cloud-run-slack-bot --replication-policy automatic --project "$PROJECT" --data-file=-
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Project 1     │    │   Project 2     │    │   Project 3     │
+│   (Monitored)   │    │   (Monitored)   │    │   (Monitored)   │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ Cloud Run       │    │ Cloud Run       │    │ Cloud Run       │
+│ Cloud Monitoring│    │ Cloud Monitoring│    │ Cloud Monitoring│
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │     Host Project        │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Cloud Run Bot     │ │
+                    │ │   (Multi-Project)   │ │
+                    │ └─────────────────────┘ │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Secret Manager    │ │
+                    │ │   (Slack Secrets)   │ │
+                    │ └─────────────────────┘ │
+                    └─────────────────────────┘
+                                 │
+                                 ▼
+                         ┌─────────────┐
+                         │   Slack     │
+                         │   Channels  │
+                         └─────────────┘
 ```
 
-## Create GCP resources
+## Prerequisites
+
+1. **Host Project**: Where the Cloud Run Slack Bot will be deployed
+2. **Target Projects**: Projects to monitor (can be the same as host project)
+3. **Slack App**: With necessary permissions and tokens
+4. **Terraform**: Version 1.0+
+
+## Setup Steps
+
+### 1. Create Secret Manager
+
+```bash
+# Set your host project
+HOST_PROJECT="your-host-project"
+
+# Create secrets in host project
+echo -n "xoxb-xxxx" | gcloud secrets create slack-bot-token-cloud-run-slack-bot --replication-policy automatic --project "$HOST_PROJECT" --data-file=-
+echo -n "your-signing-secret" | gcloud secrets create slack-signing-secret-cloud-run-slack-bot --replication-policy automatic --project "$HOST_PROJECT" --data-file=-
+```
+
+### 2. Create GCP Resources
 
 `variables.tf`:
 
 ```hcl
-variable "project" {
-  description = "GCP Project ID"
+variable "host_project_id" {
+  description = "GCP Project ID where the bot will be deployed"
+  type        = string
 }
 
-variable "region" {
-  description = "GCP Region"
+variable "monitored_projects" {
+  description = "List of projects to monitor"
+  type = list(object({
+    project_id       = string
+    region           = string
+    default_channel  = optional(string)
+    service_channels = optional(map(string))
+  }))
 }
 
-variable "channel" {
-  description = "Slack Channel ID"
+variable "slack_bot_token" {
+  description = "Slack bot token"
+  type        = string
+  sensitive   = true
 }
 
-variable "service_channel_mapping" {
-  description = "Mapping of service and job names to Slack channel IDs (format: service1:channel1,job1:channel2,service2:channel3)"
+variable "slack_signing_secret" {
+  description = "Slack signing secret"
+  type        = string
+  sensitive   = true
+}
+
+variable "slack_app_token" {
+  description = "Slack app token (for socket mode)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "slack_app_mode" {
+  description = "Slack app mode (http or socket)"
+  type        = string
+  default     = "http"
+  validation {
+    condition     = contains(["http", "socket"], var.slack_app_mode)
+    error_message = "Slack app mode must be 'http' or 'socket'."
+  }
+}
+
+variable "default_channel" {
+  description = "Default Slack channel ID"
+  type        = string
+  default     = "general"
+}
+
+variable "service_account_name" {
+  description = "Service account name for the bot"
+  type        = string
+  default     = "cloud-run-slack-bot"
+}
+
+variable "cloud_run_service_name" {
+  description = "Cloud Run service name"
+  type        = string
+  default     = "cloud-run-slack-bot"
+}
+
+variable "container_image" {
+  description = "Container image URI"
+  type        = string
+  default     = "nakamasato/cloud-run-slack-bot:latest"
+}
+
+variable "service_region" {
+  description = "Region for Cloud Run service"
+  type        = string
+  default     = "us-central1"
 }
 ```
 
@@ -171,70 +280,124 @@ To apply the following resources, the following roles are required:
 1. `roles/pubsub.admin`
 1. `roles/iam.serviceAccountAdmin`
 
+### Audit Log Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Project 1     │    │   Project 2     │    │   Project 3     │
+│   (Monitored)   │    │   (Monitored)   │    │   (Monitored)   │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ Cloud Run       │    │ Cloud Run       │    │ Cloud Run       │
+│ Cloud Monitoring│    │ Cloud Monitoring│    │ Cloud Monitoring│
+│ Logging Sink    │    │ Logging Sink    │    │ Logging Sink    │
+│ Audit Logs      │    │ Audit Logs      │    │ Audit Logs      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │     Host Project        │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Cloud Run Bot     │ │
+                    │ │   (Multi-Project)   │ │
+                    │ └─────────────────────┘ │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Pub/Sub Topic     │ │
+                    │ │   (Audit Logs)     │ │
+                    │ └─────────────────────┘ │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Secret Manager    │ │
+                    │ │   (Slack Secrets)   │ │
+                    │ └─────────────────────┘ │
+                    └─────────────────────────┘
+                                 │
+                                 ▼
+                         ┌─────────────┐
+                         │   Slack     │
+                         │   Channels  │
+                         └─────────────┘
+```
+
 Create the following resources:
 
-1. Pub/Sub topic: `cloud-run-audit-log`
-1. Logging sink: Publish Cloud Run audit logs to Pub/Sub topic
+1. Pub/Sub topic: `cloud-run-audit-log` (in host project)
+1. Logging sink: Publish Cloud Run audit logs to Pub/Sub topic (in each monitored project)
 1. Pub/Sub subscription: push subscription to deliver Cloud Run audit log to `cloud-run-slack-bot` service via HTTP request
 1. Pub/Sub -> Cloud Run service account
 
 
 ```hcl
-# pub/sub topic
+# Pub/Sub topic in host project
 resource "google_pubsub_topic" "cloud_run_audit_log" {
-  name = "cloud-run-audit-log"
+  project = var.host_project_id
+  name    = "cloud-run-audit-log"
 }
 
-resource "google_pubsub_topic_iam_member" "log_writer" {
-  project = google_pubsub_topic.cloud_run_audit_log.project
-  topic   = google_pubsub_topic.cloud_run_audit_log.name
-  role    = "roles/pubsub.publisher"
-  member  = google_logging_project_sink.cloud_run_audit_log.writer_identity
-}
-
-# Log Router Sink
+# Logging sink in each monitored project
 resource "google_logging_project_sink" "cloud_run_audit_log" {
+  for_each = { for p in var.monitored_projects : p.project_id => p }
+
+  project                = each.value.project_id
   name                   = "cloud_run_audit_log"
-  destination            = "pubsub.googleapis.com/projects/${google_pubsub_topic.cloud_run_audit_log.project}/topics/${google_pubsub_topic.cloud_run_audit_log.name}"
-  filter                 = "(resource.type = cloud_run_revision OR resource.type = cloud_run_job) AND (logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Factivity OR logName = projects/${var.project}/logs/cloudaudit.googleapis.com%2Fsystem_event)"
+  destination            = "pubsub.googleapis.com/projects/${var.host_project_id}/topics/${google_pubsub_topic.cloud_run_audit_log.name}"
+  filter                 = "(resource.type = cloud_run_revision OR resource.type = cloud_run_job) AND (logName = projects/${each.value.project_id}/logs/cloudaudit.googleapis.com%2Factivity OR logName = projects/${each.value.project_id}/logs/cloudaudit.googleapis.com%2Fsystem_event)"
   unique_writer_identity = true
 }
 
-# Pubsub -> Cloud Run https://cloud.google.com/run/docs/triggering/pubsub-push?hl=ja
-# https://cloud.google.com/run/docs/tutorials/pubsub#terraform_2
-resource "google_service_account" "sa" {
+# Grant logging sink permission to publish to Pub/Sub topic
+resource "google_pubsub_topic_iam_member" "log_writer" {
+  for_each = { for p in var.monitored_projects : p.project_id => p }
+
+  project = var.host_project_id
+  topic   = google_pubsub_topic.cloud_run_audit_log.name
+  role    = "roles/pubsub.publisher"
+  member  = google_logging_project_sink.cloud_run_audit_log[each.key].writer_identity
+}
+
+# Pubsub -> Cloud Run https://cloud.google.com/run/docs/triggering/pubsub-push
+resource "google_service_account" "pubsub_invoker" {
+  project      = var.host_project_id
   account_id   = "cloud-run-pubsub-invoker"
   display_name = "Cloud Run Pub/Sub Invoker"
 }
 
-resource "google_cloud_run_v2_service_iam_binding" "cloud_run_slack_bot" {
+resource "google_cloud_run_v2_service_iam_binding" "pubsub_invoker" {
+  project  = var.host_project_id
   name     = google_cloud_run_v2_service.cloud_run_slack_bot.name
   location = google_cloud_run_v2_service.cloud_run_slack_bot.location
   role     = "roles/run.invoker"
   members = [
     "allUsers",
-    google_service_account.sa.member,
+    google_service_account.pubsub_invoker.member,
   ]
 }
 
 resource "google_project_service_identity" "pubsub_agent" {
   provider = google-beta
+  project  = var.host_project_id
   service  = "pubsub.googleapis.com"
 }
 
-resource "google_project_iam_member" "project_token_creator" {
-  project = var.project
+resource "google_project_iam_member" "token_creator" {
+  project = var.host_project_id
   role    = "roles/iam.serviceAccountTokenCreator"
   member  = "serviceAccount:${google_project_service_identity.pubsub_agent.email}"
 }
 
-resource "google_pubsub_subscription" "subscription" {
-  name  = "pubsub_subscription"
-  topic = google_pubsub_topic.cloud_run_audit_log.name
+resource "google_pubsub_subscription" "audit_logs" {
+  project = var.host_project_id
+  name    = "cloud-run-audit-log-subscription"
+  topic   = google_pubsub_topic.cloud_run_audit_log.name
+
   push_config {
-    push_endpoint = "${google_cloud_run_v2_service.cloud_run_slack_bot.uri}/cloudrun/events" # defined in the cloud-run-slack-bot app
+    push_endpoint = "${google_cloud_run_v2_service.cloud_run_slack_bot.uri}/cloudrun/events"
     oidc_token {
-      service_account_email = google_service_account.sa.email
+      service_account_email = google_service_account.pubsub_invoker.email
     }
     attributes = {
       x-goog-version = "v1"
