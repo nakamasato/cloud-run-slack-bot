@@ -48,6 +48,15 @@ func main() {
 			log.Fatalf("Failed to create Cloud Run client for project %s: %v", project.ID, err)
 		}
 		rClients[project.ID] = rClient
+
+		// Test Cloud Run client by listing services
+		log.Printf("Testing Cloud Run client for project %s in region %s", project.ID, project.Region)
+		services, err := rClient.ListServices(ctx)
+		if err != nil {
+			log.Printf("ERROR: Failed to list services for project %s: %v", project.ID, err)
+		} else {
+			log.Printf("SUCCESS: Listed %d services for project %s: %v", len(services), project.ID, services)
+		}
 	}
 
 	// Ensure proper cleanup
