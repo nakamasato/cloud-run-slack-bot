@@ -1,0 +1,15 @@
+# Monitored Project Configuration Example
+
+# Required: This project ID (the project being monitored)
+project_id = "web-frontend-project"
+
+# Required: Region for this project's resources
+region = "us-central1"
+
+# Required: Service account email from the host project
+# Get this from host project's terraform output: terraform output service_account_email
+bot_service_account_email = "cloud-run-slack-bot@my-bot-host-project.iam.gserviceaccount.com"
+
+# Required: Webhook URL for audit logs from host project
+# Get this from host project's terraform output: terraform output audit_webhook_url
+audit_webhook_url = "https://cloud-run-slack-bot-xxxxx-uc.a.run.app/cloudrun/events"

@@ -415,3 +415,409 @@ Configuration loaded:
 - **Slack rate limits**: Consider message frequency across all projects
 - **Resource limits**: Scale bot compute resources based on project count
 - **Regional deployment**: Consider deploying bots closer to monitored regions
+
+## Terraform Deployment
+
+### Overview
+
+A comprehensive Terraform configuration is provided for automated deployment of the multi-project Cloud Run Slack Bot. This configuration handles all the complexity of setting up cross-project permissions, Pub/Sub subscriptions, and the bot service itself.
+
+### Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Project 1     │    │   Project 2     │    │   Project 3     │
+│   (Monitored)   │    │   (Monitored)   │    │   (Monitored)   │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ Cloud Run       │    │ Cloud Run       │    │ Cloud Run       │
+│ Cloud Monitoring│    │ Cloud Monitoring│    │ Cloud Monitoring│
+│ Pub/Sub Topic   │    │ Pub/Sub Topic   │    │ Pub/Sub Topic   │
+│ Audit Logs      │    │ Audit Logs      │    │ Audit Logs      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │     Host Project        │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Cloud Run Bot     │ │
+                    │ │   (Multi-Project)   │ │
+                    │ └─────────────────────┘ │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Secret Manager    │ │
+                    │ │   (Slack Secrets)   │ │
+                    │ └─────────────────────┘ │
+                    │                         │
+                    │ ┌─────────────────────┐ │
+                    │ │   Service Account   │ │
+                    │ │   (Cross-Project)   │ │
+                    │ └─────────────────────┘ │
+                    └─────────────────────────┘
+                                 │
+                                 ▼
+                         ┌─────────────┐
+                         │   Slack     │
+                         │   Channels  │
+                         └─────────────┘
+```
+
+### Quick Start
+
+1. **Navigate to Terraform directory**:
+   ```bash
+   cd terraform/multi-project
+   ```
+
+2. **Copy and configure settings**:
+   ```bash
+   cp terraform.tfvars.example terraform.tfvars
+   vi terraform.tfvars
+   ```
+
+3. **Deploy with automated script**:
+   ```bash
+   ./scripts/deploy.sh
+   ```
+
+### Configuration Example
+
+```hcl
+# Host project (where bot will be deployed)
+host_project_id = "my-bot-host-project"
+
+# Projects to monitor
+monitored_projects = [
+  {
+    project_id      = "web-frontend-project"
+    region          = "us-central1"
+    default_channel = "web-alerts"
+    service_channels = {
+      "web-app"     = "web-team"
+      "api-gateway" = "api-team"
+    }
+  },
+  {
+    project_id      = "data-pipeline-project"
+    region          = "us-east1"
+    default_channel = "data-alerts"
+    service_channels = {
+      "etl-job"      = "data-team"
+      "ml-inference" = "ml-team"
+    }
+  },
+  {
+    project_id      = "mobile-backend-project"
+    region          = "europe-west1"
+    default_channel = "mobile-alerts"
+    service_channels = {
+      "user-service"    = "mobile-team"
+      "push-service"    = "mobile-team"
+      "payment-service" = "payments-team"
+    }
+  }
+]
+
+# Slack configuration
+slack_bot_token      = "xoxb-your-bot-token"
+slack_signing_secret = "your-signing-secret"
+slack_app_mode       = "http"
+default_channel      = "general"
+```
+
+### Generated Channel Mappings
+
+The above configuration automatically generates these channel-to-project mappings:
+
+- `web-alerts` → `web-frontend-project` (auto-detect enabled)
+- `web-team` → `web-frontend-project` (auto-detect enabled)
+- `api-team` → `web-frontend-project` (auto-detect enabled)
+- `data-alerts` → `data-pipeline-project` (auto-detect enabled)
+- `data-team` → `data-pipeline-project` (auto-detect enabled)
+- `ml-team` → `data-pipeline-project` (auto-detect enabled)
+- `mobile-alerts` → `mobile-backend-project` (auto-detect enabled)
+- `mobile-team` → `mobile-backend-project` (auto-detect enabled)
+- `payments-team` → `mobile-backend-project` (auto-detect enabled)
+
+### Resources Created
+
+#### Host Project
+- **Cloud Run Service**: Multi-project Slack Bot
+- **Service Account**: Cross-project permissions
+- **Secret Manager**: Slack authentication secrets
+- **IAM Bindings**: Required permissions
+
+#### Monitored Projects (Each)
+- **Pub/Sub Topic**: Audit log events
+- **Pub/Sub Subscription**: Webhook push to bot
+- **Logging Sink**: Cloud Run audit logs
+- **IAM Bindings**: Bot access permissions
+
+### Deployment Commands
+
+```bash
+# Plan deployment
+./scripts/deploy.sh plan
+
+# Deploy infrastructure
+./scripts/deploy.sh
+
+# Validate configuration
+./scripts/deploy.sh validate
+
+# Destroy infrastructure
+./scripts/deploy.sh destroy
+```
+
+### Manual Deployment
+
+If you prefer manual deployment:
+
+```bash
+# Initialize Terraform
+terraform init
+
+# Plan deployment
+terraform plan
+
+# Apply configuration
+terraform apply
+
+# View outputs
+terraform output
+```
+
+### Post-Deployment Configuration
+
+After successful deployment, configure your Slack App:
+
+1. **Events API URL**: `https://your-bot-url/slack/events`
+2. **Interactive Components URL**: `https://your-bot-url/slack/interaction`
+3. **Slash Commands**: Configure if needed
+
+### IAM Permissions
+
+#### Host Project Permissions
+サービスアカウントに付与される権限（Terraformコード：`google_project_iam_member.host_permissions`）：
+
+```hcl
+resource "google_project_iam_member" "host_permissions" {
+  for_each = toset([
+    "roles/run.invoker",
+    "roles/secretmanager.secretAccessor",
+    "roles/pubsub.subscriber",
+    "roles/pubsub.publisher",
+    "roles/logging.logWriter"
+  ])
+
+  project = var.host_project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.bot_sa.email}"
+}
+```
+
+- `roles/run.invoker`: Cloud Run service invocation
+- `roles/secretmanager.secretAccessor`: Slack secrets access
+- `roles/pubsub.subscriber`: Pub/Sub message reception
+- `roles/pubsub.publisher`: Pub/Sub message publishing
+- `roles/logging.logWriter`: Log writing
+
+#### Monitored Project Permissions
+各監視対象プロジェクトに付与される権限（Terraformコード：`google_project_iam_member.monitored_permissions`）：
+
+```hcl
+resource "google_project_iam_member" "monitored_permissions" {
+  for_each = {
+    for pair in flatten([
+      for project in var.monitored_projects : [
+        for role in ["roles/run.viewer", "roles/monitoring.viewer", "roles/logging.viewer"] : {
+          project_id = project.project_id
+          role       = role
+          key        = "${project.project_id}-${role}"
+        }
+      ]
+    ]) : pair.key => pair
+  }
+
+  project = each.value.project_id
+  role    = each.value.role
+  member  = "serviceAccount:${google_service_account.bot_sa.email}"
+}
+```
+
+- `roles/run.viewer`: Cloud Run resource access
+- `roles/monitoring.viewer`: Metrics access
+- `roles/logging.viewer`: Log access
+
+#### 追加権限（Pub/Sub用）
+監査ログ用のPub/Sub権限（Terraformコード：`google_pubsub_topic_iam_binding.sink_publisher`）：
+
+```hcl
+resource "google_pubsub_topic_iam_binding" "sink_publisher" {
+  for_each = { for p in var.monitored_projects : p.project_id => p }
+
+  project = each.value.project_id
+  topic   = google_pubsub_topic.audit_logs[each.key].name
+  role    = "roles/pubsub.publisher"
+
+  members = [
+    google_logging_project_sink.audit_sink[each.key].writer_identity
+  ]
+}
+```
+
+#### Cloud Run Public Access
+Slackからのwebhook受信用の公開アクセス権限（Terraformコード：`google_cloud_run_v2_service_iam_binding.public_access`）：
+
+```hcl
+resource "google_cloud_run_v2_service_iam_binding" "public_access" {
+  project  = var.host_project_id
+  location = google_cloud_run_v2_service.bot.location
+  name     = google_cloud_run_v2_service.bot.name
+  role     = "roles/run.invoker"
+
+  members = [
+    "allUsers"
+  ]
+}
+```
+
+### Terraform Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `host_project_id` | Project where bot is deployed | Required |
+| `monitored_projects` | List of projects to monitor | Required |
+| `slack_bot_token` | Slack bot token | Required |
+| `slack_signing_secret` | Slack signing secret | Required |
+| `slack_app_token` | Slack app token (socket mode) | "" |
+| `slack_app_mode` | "http" or "socket" | "http" |
+| `default_channel` | Default Slack channel | "general" |
+| `service_account_name` | Service account name | "cloud-run-slack-bot" |
+| `cloud_run_service_name` | Cloud Run service name | "cloud-run-slack-bot" |
+| `container_image` | Container image URI | "gcr.io/PROJECT_ID/cloud-run-slack-bot:latest" |
+
+### Terraform Outputs
+
+| Output | Description |
+|--------|-------------|
+| `service_url` | Cloud Run service URL |
+| `webhook_url` | Slack webhook URL |
+| `interaction_url` | Slack interaction URL |
+| `service_account_email` | Service account email |
+| `projects_config` | Generated projects configuration |
+| `channel_to_project_mapping` | Channel mappings |
+
+### Monitoring and Troubleshooting
+
+#### View Terraform State
+```bash
+terraform state list
+terraform state show google_cloud_run_v2_service.bot
+```
+
+#### Check Deployment Status
+```bash
+terraform output service_url
+terraform output projects_config
+```
+
+#### Debug Issues
+```bash
+# Check service logs
+gcloud run services logs read cloud-run-slack-bot --project=HOST_PROJECT_ID
+
+# Check Pub/Sub subscriptions
+gcloud pubsub subscriptions list --project=MONITORED_PROJECT_ID
+
+# Verify IAM permissions
+gcloud projects get-iam-policy PROJECT_ID --flatten="bindings[].members" --format="table(bindings.role)" --filter="bindings.members:SERVICE_ACCOUNT_EMAIL"
+```
+
+### Updating Configuration
+
+To add new projects or modify existing ones:
+
+1. Update `terraform.tfvars`
+2. Run `terraform plan` to review changes
+3. Run `terraform apply` to apply changes
+4. The bot will automatically pick up new configuration
+
+### Best Practices
+
+1. **State Management**: Use remote state storage
+   ```hcl
+   terraform {
+     backend "gcs" {
+       bucket = "your-terraform-state-bucket"
+       prefix = "cloud-run-slack-bot"
+     }
+   }
+   ```
+
+2. **Environment Separation**: Use workspaces for different environments
+   ```bash
+   terraform workspace new production
+   terraform workspace new staging
+   ```
+
+3. **Security**: Store sensitive variables securely
+   ```bash
+   export TF_VAR_slack_bot_token="xoxb-your-token"
+   ```
+
+4. **Validation**: Always run plan before apply
+   ```bash
+   terraform plan -out=tfplan
+   terraform apply tfplan
+   ```
+
+### Cost Optimization
+
+- **Cloud Run**: Configured for 0 minimum instances
+- **Pub/Sub**: Pay-per-use pricing
+- **Secret Manager**: Minimal cost for secrets
+- **Monitoring**: Included in GCP free tier
+
+### Advanced Configuration
+
+#### Custom Service Account
+```hcl
+# Use existing service account
+variable "existing_service_account" {
+  description = "Email of existing service account"
+  type        = string
+  default     = ""
+}
+```
+
+#### Regional Deployment
+```hcl
+# Deploy to specific region
+variable "service_region" {
+  description = "Region for Cloud Run service"
+  type        = string
+  default     = "us-central1"
+}
+```
+
+#### Resource Limits
+```hcl
+# Custom resource limits
+variable "cpu_limit" {
+  description = "CPU limit for Cloud Run"
+  type        = string
+  default     = "1000m"
+}
+
+variable "memory_limit" {
+  description = "Memory limit for Cloud Run"
+  type        = string
+  default     = "1Gi"
+}
+```
+
+This Terraform configuration provides a production-ready, scalable deployment of the multi-project Cloud Run Slack Bot with automated channel-based project detection.

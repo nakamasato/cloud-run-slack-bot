@@ -29,6 +29,7 @@ func main() {
 
 	ctx := context.Background()
 
+
 	// Initialize clients for all projects
 	rClients := make(map[string]*cloudrun.Client)
 	mClients := make(map[string]*monitoring.Client)
