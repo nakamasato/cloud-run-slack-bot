@@ -61,7 +61,7 @@ jobs:
 
       - name: Set image tag
         id: set_image_tag
-        uses: nakamasato/github-actions/set-image-tag@1.13.0
+        uses: nakamasato/github-actions/set-image-tag@1.13.1
 
       - name: Set config
         id: set_config
