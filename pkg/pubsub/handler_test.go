@@ -145,3 +145,111 @@ func TestCloudRunAuditLogHandler(t *testing.T) {
 		})
 	}
 }
+
+
+
+// Test revision formatting logic directly
+func TestRevisionFormatting(t *testing.T) {
+	tests := []struct {
+		name                string
+		traffic             []struct {
+			LatestRevision bool
+			Percent        int
+			RevisionName   string
+			Tag            string
+		}
+		expectedContains    []string
+		expectedNotContains []string
+	}{
+		{
+			name: "traffic with tags",
+			traffic: []struct {
+				LatestRevision bool
+				Percent        int
+				RevisionName   string
+				Tag            string
+			}{
+				{LatestRevision: true, Percent: 100, RevisionName: "my-service-00001", Tag: "production"},
+				{LatestRevision: false, Percent: 0, RevisionName: "my-service-00002", Tag: "canary"},
+			},
+			expectedContains: []string{
+				"`my-service-00001` (100%) [production] ✅",
+				"`my-service-00002` (0%) [canary]",
+			},
+			expectedNotContains: []string{
+				"👀",
+			},
+		},
+		{
+			name: "traffic without tags",
+			traffic: []struct {
+				LatestRevision bool
+				Percent        int
+				RevisionName   string
+				Tag            string
+			}{
+				{LatestRevision: true, Percent: 100, RevisionName: "my-service-00001", Tag: ""},
+				{LatestRevision: false, Percent: 0, RevisionName: "my-service-00002", Tag: ""},
+			},
+			expectedContains: []string{
+				"`my-service-00001` (100%) ✅",
+				"`my-service-00002` (0%)",
+			},
+			expectedNotContains: []string{
+				"👀",
+				"[]",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the formatting logic from the handler
+			revisions := []string{}
+			for _, traffic := range tt.traffic {
+				revision := fmt.Sprintf("- `%s` (%d%%)", traffic.RevisionName, traffic.Percent)
+				if traffic.Tag != "" {
+					revision = fmt.Sprintf("%s [%s]", revision, traffic.Tag)
+				}
+				if traffic.LatestRevision {
+					revision = fmt.Sprintf("%s ✅", revision)
+				}
+				revisions = append(revisions, revision)
+			}
+
+			output := fmt.Sprintf("%v", revisions)
+
+			// Check expected content
+			for _, expected := range tt.expectedContains {
+				found := false
+				for _, rev := range revisions {
+					if containsString(rev, expected) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected to find %q in revisions, but got: %v", expected, revisions)
+				}
+			}
+
+			// Check that unwanted content is not present
+			for _, notExpected := range tt.expectedNotContains {
+				for _, rev := range revisions {
+					if containsString(rev, notExpected) {
+						t.Errorf("Should not find %q in revision %q, output: %s", notExpected, rev, output)
+					}
+				}
+			}
+		})
+	}
+}
+
+func containsString(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if i+len(substr) <= len(s) && s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

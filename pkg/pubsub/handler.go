@@ -69,6 +69,7 @@ type CloudRunAuditLog struct {
 					LatestRevision bool   `json:"latestRevision"`
 					Percent        int    `json:"percent"`
 					RevisionName   string `json:"revisionName"`
+					Tag            string `json:"tag"`
 				} `json:"traffic"`
 				// For Jobs
 				LatestCreatedExecutionName string `json:"latestCreatedExecutionName"`
@@ -226,9 +227,16 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 			})
 		}
 
-		revisions := []string{}
-		for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
-			revisions = append(revisions, fmt.Sprintf("- `%s` (%d%%) (latest: %s)", traffic.RevisionName, traffic.Percent, boolEmoji[traffic.LatestRevision]))
+	revisions := []string{}
+	for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
+		revision := fmt.Sprintf("- `%s` (%d%%)", traffic.RevisionName, traffic.Percent)
+		if traffic.Tag != "" {
+			revision = fmt.Sprintf("%s [%s]", revision, traffic.Tag)
+		}
+		if traffic.LatestRevision {
+			revision = fmt.Sprintf("%s ✅", revision)
+		}
+		revisions = append(revisions, revision)
 		}
 		if len(revisions) > 0 {
 			fields = append(fields, slack.AttachmentField{
@@ -419,9 +427,16 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 			})
 		}
 
-		revisions := []string{}
-		for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
-			revisions = append(revisions, fmt.Sprintf("- `%s` (%d%%) (latest: %s)", traffic.RevisionName, traffic.Percent, boolEmoji[traffic.LatestRevision]))
+	revisions := []string{}
+	for _, traffic := range logEntry.ProtoPayload.Response.Status.Traffic {
+		revision := fmt.Sprintf("- `%s` (%d%%)", traffic.RevisionName, traffic.Percent)
+		if traffic.Tag != "" {
+			revision = fmt.Sprintf("%s [%s]", revision, traffic.Tag)
+		}
+		if traffic.LatestRevision {
+			revision = fmt.Sprintf("%s ✅", revision)
+		}
+		revisions = append(revisions, revision)
 		}
 		if len(revisions) > 0 {
 			fields = append(fields, slack.AttachmentField{
