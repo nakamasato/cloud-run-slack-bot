@@ -28,7 +28,19 @@ const (
 	defaultDuration          = 24 * time.Hour
 	defaultAggregationPeriod = 5 * time.Minute
 	defaultMetricsType       = "count"
+	maxLogTextLength         = 100 // Maximum length for logged message text
 )
+
+// truncateText truncates a string to maxLength characters, adding "..." if truncated
+func truncateText(text string, maxLength int) string {
+	if len(text) <= maxLength {
+		return text
+	}
+	if maxLength <= 3 {
+		return text[:maxLength]
+	}
+	return text[:maxLength-3] + "..."
+}
 
 var durationAggregationPeriodMap = map[string]time.Duration{
 	"1h":   1 * time.Minute,          // 60 points
@@ -119,7 +131,7 @@ func (h *SlackEventHandler) HandleEvent(ctx context.Context, event *slackevents.
 			zap.String("command", command),
 			zap.String("user", e.User),
 			zap.String("channel", e.Channel),
-			zap.String("text", e.Text))
+			zap.String("text", truncateText(e.Text, maxLogTextLength)))
 
 		currentItem, ok := h.memory.Get(e.User)
 
