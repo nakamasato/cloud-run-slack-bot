@@ -20,6 +20,16 @@ func main() {
 	// Create a root context
 	ctx := context.Background()
 
+	// Determine service name from environment or use a default
+	serviceName := os.Getenv("SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = "cloud-run-slack-bot"
+	}
+	// Set the environment variable so the logger can pick it up
+	if err := os.Setenv("SERVICE_NAME", serviceName); err != nil {
+		log.Printf("Warn: Failed to set SERVICE_NAME environment variable: %v", err)
+	}
+
 	// Initialize logger
 	l, err := logger.NewLogger()
 	if err != nil {
@@ -42,12 +52,6 @@ func main() {
 	region := os.Getenv("REGION")
 	if region == "" {
 		l.Fatal("REGION env var is required")
-	}
-
-	// Set service name environment variable for logger
-	serviceName := "cloud-run-slack-bot"
-	if err := os.Setenv("SERVICE_NAME", serviceName); err != nil {
-		l.Warn("Failed to set SERVICE_NAME environment variable", zap.Error(err))
 	}
 
 	// Initialize OpenTelemetry
