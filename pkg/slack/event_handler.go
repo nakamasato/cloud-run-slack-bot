@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -197,6 +198,16 @@ func (h *SlackEventHandler) HandleInteraction(ctx context.Context, interaction *
 			parts := strings.SplitN(value, ":", 2)
 			resourceType = parts[0]
 			resourceName = parts[1]
+		}
+
+		// Sanitize resource name to prevent path traversal attacks
+		// Use filepath.Base to remove any path components
+		resourceName = filepath.Base(resourceName)
+		// Validate that the sanitized name doesn't contain path separators
+		if strings.ContainsAny(resourceName, "/\\") {
+			l.Error("Invalid resource name contains path separators",
+				zap.String("resource_name", resourceName))
+			return fmt.Errorf("invalid resource name")
 		}
 
 		switch action.ActionID {
