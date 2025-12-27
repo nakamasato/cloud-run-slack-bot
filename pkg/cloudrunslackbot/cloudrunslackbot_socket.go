@@ -52,8 +52,7 @@ func (svc *CloudRunSlackBotSocket) SlackEventsHandler() {
 	// Create logger
 	l, err := logger.NewLogger()
 	if err != nil {
-		log.Printf("Failed to create logger: %v", err)
-		return
+		log.Fatalf("Failed to create logger for socket mode handler: %v", err)
 	}
 
 	// Create a background context for handler calls
