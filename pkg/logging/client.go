@@ -83,10 +83,15 @@ func (c *Client) GetLogsByTraceID(ctx context.Context, traceID string) ([]LogEnt
 
 func (c *Client) queryLogs(ctx context.Context, filter string) ([]LogEntry, error) {
 	var entries []LogEntry
+	const maxEntries = 100 // Limit to prevent memory exhaustion and API quota issues
 
-	// Limit to 100 entries to prevent memory exhaustion and API quota issues
-	it := c.client.Entries(ctx, logadmin.Filter(filter), logadmin.NewestFirst(), logadmin.MaxLogEntries(100))
+	it := c.client.Entries(ctx, logadmin.Filter(filter), logadmin.NewestFirst())
 	for {
+		// Stop if we've reached the limit
+		if len(entries) >= maxEntries {
+			break
+		}
+
 		entry, err := it.Next()
 		if err == iterator.Done {
 			break
