@@ -2,6 +2,7 @@ package slack
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -1274,9 +1275,20 @@ func (h *MultiProjectSlackEventHandler) debugResource(ctx context.Context, chann
 		log.Printf("Warning: failed to send analyzing message: %v", err)
 	}
 
-	// Run debug analysis
-	result, err := h.debugger.DebugResource(ctx, projectID, resourceType, resourceName)
+	// Run debug analysis with timeout
+	analysisCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	result, err := h.debugger.DebugResource(analysisCtx, projectID, resourceType, resourceName)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			_, _, postErr := h.client.PostMessageContext(ctx, channelId,
+				slack.MsgOptionText("Debug analysis timed out. The service may have too many errors or the AI service is slow. Try reducing the lookback window.", false))
+			if postErr != nil {
+				return postErr
+			}
+			return err
+		}
 		_, _, postErr := h.client.PostMessageContext(ctx, channelId,
 			slack.MsgOptionText(fmt.Sprintf("Debug analysis failed: %s", err.Error()), false))
 		if postErr != nil {
