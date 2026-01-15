@@ -64,9 +64,63 @@ func NewAgent(ctx context.Context, cfg Config) (*Agent, error) {
 	return &Agent{client: client, model: cfg.ModelName}, nil
 }
 
+var groupResponseSchema = &genai.Schema{
+	Type: genai.TypeArray,
+	Items: &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"pattern": {
+				Type:        genai.TypeString,
+				Description: "A brief description of the error pattern.",
+			},
+			"indices": {
+				Type: genai.TypeArray,
+				Items: &genai.Schema{
+					Type: genai.TypeInteger,
+				},
+				Description: "1-based indices of errors belonging to this group.",
+			},
+		},
+		Required: []string{"pattern", "indices"},
+	},
+}
+
+var analysisResponseSchema = &genai.Schema{
+	Type: genai.TypeObject,
+	Properties: map[string]*genai.Schema{
+		"summary": {
+			Type:        genai.TypeString,
+			Description: "Brief summary of what's happening (1-2 sentences).",
+		},
+		"possible_causes": {
+			Type: genai.TypeArray,
+			Items: &genai.Schema{
+				Type: genai.TypeString,
+			},
+			Description: "2-4 possible root causes.",
+		},
+		"suggestions": {
+			Type: genai.TypeArray,
+			Items: &genai.Schema{
+				Type: genai.TypeString,
+			},
+			Description: "2-4 actionable suggestions to fix or investigate.",
+		},
+	},
+	Required: []string{"summary", "possible_causes", "suggestions"},
+}
+
 // generateContent is a helper method to generate content from the LLM.
-func (a *Agent) generateContent(ctx context.Context, prompt string) (string, error) {
-	result, err := a.client.Models.GenerateContent(ctx, a.model, genai.Text(prompt), nil)
+func (a *Agent) generateContent(ctx context.Context, prompt string, outputSchema *genai.Schema) (string, error) {
+	var cfg *genai.GenerateContentConfig
+	if outputSchema != nil {
+		cfg = &genai.GenerateContentConfig{
+			ResponseMIMEType: "application/json",
+			ResponseSchema:   outputSchema,
+		}
+	}
+
+	result, err := a.client.Models.GenerateContent(ctx, a.model, genai.Text(prompt), cfg)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate content: %w", err)
 	}
@@ -108,7 +162,7 @@ Example response:
 
 Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n"))
 
-	result, err := a.generateContent(ctx, prompt)
+	result, err := a.generateContent(ctx, prompt, groupResponseSchema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run LLM for grouping: %w", err)
 	}
@@ -187,7 +241,7 @@ Respond with a JSON object containing:
 
 Only respond with valid JSON, no other text.`, group.Pattern, group.Count, group.Representative.Message, traceContext)
 
-	result, err := a.generateContent(ctx, prompt)
+	result, err := a.generateContent(ctx, prompt, analysisResponseSchema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run LLM for analysis: %w", err)
 	}
