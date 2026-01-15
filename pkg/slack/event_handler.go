@@ -1411,13 +1411,13 @@ func buildLogLink(projectID, resourceType, resourceName string, lookback time.Du
 	switch resourceType {
 	case "service":
 		filter = fmt.Sprintf(
-			`resource.type = "cloud_run_revision" AND resource.labels.service_name = "%s" AND severity >= ERROR AND timestamp >= "%s"`,
+			"resource.type = \"cloud_run_revision\"\nresource.labels.service_name = \"%s\"\nseverity>=ERROR\ntimestamp>\"%s\"",
 			resourceName,
 			startTime.Format(time.RFC3339),
 		)
 	case "job":
 		filter = fmt.Sprintf(
-			`resource.type = "cloud_run_job" AND resource.labels.job_name = "%s" AND severity >= ERROR AND timestamp >= "%s"`,
+			"resource.type = \"cloud_run_job\"\nresource.labels.job_name = \"%s\"\nseverity>=ERROR\ntimestamp>\"%s\"",
 			resourceName,
 			startTime.Format(time.RFC3339),
 		)
@@ -1427,6 +1427,8 @@ func buildLogLink(projectID, resourceType, resourceName string, lookback time.Du
 
 	escapedQuery := url.PathEscape(filter)
 	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
-	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s?project=%s",
-		escapedQuery, timestamp, projectID)
+	// Convert lookback duration to ISO 8601 duration format for the URL
+	durationStr := fmt.Sprintf("PT%dM", int(lookback.Minutes()))
+	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s;duration=%s?project=%s",
+		escapedQuery, timestamp, durationStr, projectID)
 }
