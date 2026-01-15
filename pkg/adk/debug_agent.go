@@ -12,6 +12,8 @@ import (
 	"google.golang.org/genai"
 )
 
+const maxErrorsForGrouping = 100 // Limit errors to prevent LLM context window issues
+
 // Config for agent initialization.
 type Config struct {
 	Project   string // GCP project for Vertex AI
@@ -139,9 +141,16 @@ func (a *DebugAgent) GroupErrors(ctx context.Context, errors []ErrorLog) ([]Erro
 		return nil, nil
 	}
 
+	// Limit errors for LLM processing to prevent context window issues
+	errorsToProcess := errors
+	if len(errors) > maxErrorsForGrouping {
+		log.Printf("Warning: Truncating %d errors to %d for LLM grouping\n", len(errors), maxErrorsForGrouping)
+		errorsToProcess = errors[:maxErrorsForGrouping]
+	}
+
 	// Prepare error messages for the prompt
 	var errorMessages []string
-	for i, e := range errors {
+	for i, e := range errorsToProcess {
 		errorMessages = append(errorMessages, fmt.Sprintf("%d. [%s] %s", i+1, e.Timestamp.Format(time.RFC3339), e.Message))
 	}
 
@@ -185,9 +194,9 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 		// Fallback: treat all errors as one group
 		return []ErrorGroup{{
 			Pattern:        "Ungrouped errors",
-			Representative: errors[0],
-			SimilarErrors:  errors[1:],
-			Count:          len(errors),
+			Representative: errorsToProcess[0],
+			SimilarErrors:  errorsToProcess[1:],
+			Count:          len(errorsToProcess),
 		}}, nil
 	}
 
@@ -204,13 +213,13 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 		}
 
 		for i, idx := range g.Indices {
-			if idx < 1 || idx > len(errors) {
+			if idx < 1 || idx > len(errorsToProcess) {
 				continue
 			}
 			if i == 0 {
-				group.Representative = errors[idx-1]
+				group.Representative = errorsToProcess[idx-1]
 			} else {
-				group.SimilarErrors = append(group.SimilarErrors, errors[idx-1])
+				group.SimilarErrors = append(group.SimilarErrors, errorsToProcess[idx-1])
 			}
 		}
 
@@ -222,7 +231,7 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 		}
 	}
 
-	log.Printf("Grouped %d errors into %d groups\n", len(errors), len(groups))
+	log.Printf("Grouped %d errors into %d groups\n", len(errorsToProcess), len(groups))
 	return groups, nil
 }
 
