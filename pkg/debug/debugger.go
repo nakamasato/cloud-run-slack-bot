@@ -10,6 +10,8 @@ import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
 )
 
+const maxTraceLogsForAnalysis = 20 // Limit trace logs to prevent overwhelming LLM
+
 // Debugger orchestrates the debug workflow.
 type Debugger struct {
 	lClients map[string]*logging.Client
@@ -90,9 +92,8 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 			if err != nil {
 				log.Printf("Warning: failed to get trace logs for %s: %v\n", group.Representative.TraceID, err)
 			} else {
-				maxTraceLogs := 20 // Limit to most relevant logs
 				for i, entry := range traceEntries {
-					if i >= maxTraceLogs {
+					if i >= maxTraceLogsForAnalysis {
 						break
 					}
 					traceLogs = append(traceLogs, fmt.Sprintf("[%s] %s: %s",

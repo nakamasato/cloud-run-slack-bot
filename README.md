@@ -134,7 +134,7 @@ graph TB
 1. `roles/run.viewer`: To get information of Cloud Run services
 1. `roles/monitoring.viewer`: To get metrics of Cloud Run services
 1. `roles/logging.viewer`: To read Cloud Logging entries (required for debug feature). Grant this role in each target project when using multi-project configuration.
-1. `roles/aiplatform.user`: To access Vertex AI Gemini API (required for debug feature)
+1. `roles/aiplatform.user`: To access Vertex AI Gemini API (required for debug feature). Grant this role on the project specified in `GCP_PROJECT_ID`. This role includes the `aiplatform.endpoints.predict` permission.
 
 #### Environment Variables
 
@@ -188,9 +188,6 @@ The debug feature uses Gemini AI via Vertex AI to analyze error logs. To enable:
 | `DEBUG_TIME_WINDOW` | No | `30` | Time window for error analysis (in minutes) |
 
 **Usage**: `@bot debug` or `@bot dbg` to analyze recent errors for a Cloud Run service or job.
-
-**Required IAM Permissions** (on the Vertex AI project):
-- `aiplatform.endpoints.predict` - Access Vertex AI Gemini API
 
 **Required APIs** (must be enabled on the Vertex AI project):
 - Vertex AI API (`aiplatform.googleapis.com`)
