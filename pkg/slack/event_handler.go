@@ -1299,10 +1299,6 @@ func (h *MultiProjectSlackEventHandler) postDebugResult(ctx context.Context, cha
 	// Build header text
 	headerText := fmt.Sprintf("Debug Analysis: %s `%s` (Project: `%s`)\nTime Range: Last %d minutes | Total Errors: %d | Error Groups: %d",
 		result.ResourceType, result.ResourceName, result.ProjectID, result.LookbackMin, result.TotalErrors, len(result.ErrorGroups))
-	logLink := buildLogLink(result.ProjectID, result.ResourceType, result.ResourceName, time.Duration(result.LookbackMin)*time.Minute, result.GeneratedAt)
-	if logLink != "" {
-		headerText = fmt.Sprintf("%s\nLog: <%s|Log>", headerText, logLink)
-	}
 
 	_, threadTS, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText(headerText, false))
 	if err != nil {
@@ -1310,37 +1306,63 @@ func (h *MultiProjectSlackEventHandler) postDebugResult(ctx context.Context, cha
 	}
 
 	for i, group := range result.ErrorGroups {
-		var details strings.Builder
-		details.WriteString(fmt.Sprintf("*Group %d: %s (%d errors)*\n", i+1, group.Pattern, group.ErrorCount))
-		details.WriteString(fmt.Sprintf("*Summary*: %s\n", group.Analysis.Summary))
+		groupTitle := fmt.Sprintf("Group %d: %s. (%d errors)", i+1, group.Pattern, group.ErrorCount)
 
+		summary := group.Analysis.Summary
+		if summary == "" {
+			summary = "N/A"
+		}
+
+		possibleCauses := "None"
 		if len(group.Analysis.PossibleCauses) > 0 {
-			details.WriteString("*Possible Causes*:\n")
-			for _, cause := range group.Analysis.PossibleCauses {
-				details.WriteString(fmt.Sprintf("- %s\n", cause))
-			}
+			possibleCauses = strings.Join(group.Analysis.PossibleCauses, "\n")
 		}
 
+		suggestions := "None"
 		if len(group.Analysis.Suggestions) > 0 {
-			details.WriteString("*Suggestions*:\n")
-			for _, suggestion := range group.Analysis.Suggestions {
-				details.WriteString(fmt.Sprintf("- %s\n", suggestion))
-			}
+			suggestions = strings.Join(group.Analysis.Suggestions, "\n")
 		}
 
+		traceValue := "None"
 		if group.TraceID != "" {
 			traceLink := buildTraceLink(result.ProjectID, group.TraceID, group.TraceTimestamp)
 			if traceLink == "" {
-				details.WriteString(fmt.Sprintf("Sample Trace: `%s`\n", group.TraceID))
+				traceValue = fmt.Sprintf("`%s`", group.TraceID)
 			} else {
-				details.WriteString(fmt.Sprintf("Sample Trace: <%s|%s>\n", traceLink, group.TraceID))
+				traceValue = fmt.Sprintf("<%s|%s>", traceLink, group.TraceID)
 			}
 		}
 
-		_, _, postErr := h.client.PostMessageContext(
-			ctx,
-			channelId,
-			slack.MsgOptionText(details.String(), false),
+		attachment := slack.Attachment{
+			Color: "danger",
+			Title: groupTitle,
+			Fields: []slack.AttachmentField{
+				{
+					Title: "Summary",
+					Value: summary,
+					Short: false,
+				},
+				{
+					Title: "Possible Causes",
+					Value: possibleCauses,
+					Short: false,
+				},
+				{
+					Title: "Suggestions",
+					Value: suggestions,
+					Short: false,
+				},
+				{
+					Title: "Sample Trace",
+					Value: traceValue,
+					Short: false,
+				},
+			},
+			MarkdownIn: []string{"fields"},
+		}
+
+		_, _, postErr := h.client.PostMessageContext(ctx, channelId,
+			slack.MsgOptionAttachments(attachment),
 			slack.MsgOptionTS(threadTS),
 		)
 		if postErr != nil {
@@ -1358,36 +1380,6 @@ func buildTraceLink(projectID, traceID string, cursorTimestamp time.Time) string
 
 	query := fmt.Sprintf(`trace="projects/%s/traces/%s"`, projectID, traceID)
 	escapedQuery := url.QueryEscape(query)
-	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
-	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s?project=%s",
-		escapedQuery, timestamp, projectID)
-}
-
-func buildLogLink(projectID, resourceType, resourceName string, lookback time.Duration, cursorTimestamp time.Time) string {
-	if projectID == "" || resourceType == "" || resourceName == "" || lookback <= 0 || cursorTimestamp.IsZero() {
-		return ""
-	}
-
-	startTime := cursorTimestamp.Add(-lookback)
-	var filter string
-	switch resourceType {
-	case "service":
-		filter = fmt.Sprintf(
-			`resource.type = "cloud_run_revision" AND resource.labels.service_name = "%s" AND severity >= ERROR AND timestamp >= "%s"`,
-			resourceName,
-			startTime.Format(time.RFC3339),
-		)
-	case "job":
-		filter = fmt.Sprintf(
-			`resource.type = "cloud_run_job" AND resource.labels.job_name = "%s" AND severity >= ERROR AND timestamp >= "%s"`,
-			resourceName,
-			startTime.Format(time.RFC3339),
-		)
-	default:
-		return ""
-	}
-
-	escapedQuery := url.QueryEscape(filter)
 	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
 	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s?project=%s",
 		escapedQuery, timestamp, projectID)
