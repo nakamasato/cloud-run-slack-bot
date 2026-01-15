@@ -83,14 +83,18 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 			TraceTimestamp: group.Representative.Timestamp,
 		}
 
-		// Get trace logs if available
+		// Get trace logs if available (limit to most recent relevant logs)
 		var traceLogs []string
 		if group.Representative.TraceID != "" {
 			traceEntries, err := lClient.GetLogsByTraceID(ctx, group.Representative.TraceID)
 			if err != nil {
 				log.Printf("Warning: failed to get trace logs for %s: %v\n", group.Representative.TraceID, err)
 			} else {
-				for _, entry := range traceEntries {
+				maxTraceLogs := 20 // Limit to most relevant logs
+				for i, entry := range traceEntries {
+					if i >= maxTraceLogs {
+						break
+					}
 					traceLogs = append(traceLogs, fmt.Sprintf("[%s] %s: %s",
 						entry.Timestamp.Format(time.RFC3339),
 						entry.Severity,
