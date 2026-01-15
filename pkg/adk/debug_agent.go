@@ -213,7 +213,13 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 				group.SimilarErrors = append(group.SimilarErrors, errors[idx-1])
 			}
 		}
-		groups = append(groups, group)
+
+		// Only add group if we have at least one valid error
+		actualCount := 1 + len(group.SimilarErrors)
+		if actualCount > 0 && group.Representative.Message != "" {
+			group.Count = actualCount
+			groups = append(groups, group)
+		}
 	}
 
 	log.Printf("Grouped %d errors into %d groups\n", len(errors), len(groups))
