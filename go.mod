@@ -2,7 +2,7 @@ module github.com/nakamasato/cloud-run-slack-bot
 
 go 1.24.4
 
-toolchain go1.25.5
+toolchain go1.25.6
 
 require (
 	cloud.google.com/go/logging v1.13.1
