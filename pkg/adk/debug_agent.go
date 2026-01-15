@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,6 +14,18 @@ import (
 )
 
 const maxErrorsForGrouping = 100 // Limit errors to prevent LLM context window issues
+
+// extractJSON extracts a JSON string from a markdown code block or raw response.
+func extractJSON(response string) string {
+	// Regex to find content within ```json ... ``` or ``` ... ```
+	re := regexp.MustCompile("```(?:json)?\\s*([\\s\\S]*?)\\s*```")
+	matches := re.FindStringSubmatch(response)
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+	// Fallback for raw JSON response without markdown
+	return strings.TrimSpace(response)
+}
 
 // Config for agent initialization.
 type Config struct {
@@ -183,11 +196,7 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 	}
 
 	// Clean up response (remove markdown code blocks if present)
-	responseText := strings.TrimSpace(result)
-	responseText = strings.TrimPrefix(responseText, "```json")
-	responseText = strings.TrimPrefix(responseText, "```")
-	responseText = strings.TrimSuffix(responseText, "```")
-	responseText = strings.TrimSpace(responseText)
+	responseText := extractJSON(result)
 
 	if err := json.Unmarshal([]byte(responseText), &groupResponse); err != nil {
 		log.Printf("Failed to parse grouping response: %v\nResponse: %s", err, responseText)
@@ -269,11 +278,7 @@ Only respond with valid JSON, no other text.`, group.Pattern, group.Count, group
 	}
 
 	// Clean up response
-	responseText := strings.TrimSpace(result)
-	responseText = strings.TrimPrefix(responseText, "```json")
-	responseText = strings.TrimPrefix(responseText, "```")
-	responseText = strings.TrimSuffix(responseText, "```")
-	responseText = strings.TrimSpace(responseText)
+	responseText := extractJSON(result)
 
 	if err := json.Unmarshal([]byte(responseText), &analysis); err != nil {
 		log.Printf("Failed to parse analysis response: %v\nResponse: %s", err, responseText)
