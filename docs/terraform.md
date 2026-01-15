@@ -141,13 +141,21 @@ variable "service_region" {
 
 ```hcl
 locals {
+  # Build PROJECTS_CONFIG JSON from monitored_projects variable
+  projects_config = jsonencode([
+    for project in var.monitored_projects : {
+      id              = project.project_id
+      region          = project.region
+      defaultChannel  = project.default_channel
+      serviceChannels = project.service_channels
+    }
+  ])
+
   cloud_run_slack_bot_envs = {
-    PROJECT              = var.project
-    REGION               = var.region
-    SLACK_APP_MODE       = "http"
-    SLACK_CHANNEL        = var.channel
-    SERVICE_CHANNEL_MAPPING = var.service_channel_mapping
-    TMP_DIR             = "/tmp"
+    PROJECTS_CONFIG = local.projects_config
+    SLACK_APP_MODE  = var.slack_app_mode
+    SLACK_CHANNEL   = var.default_channel
+    TMP_DIR         = "/tmp"
   }
   cloud_run_slack_bot_secrets = {
     SLACK_BOT_TOKEN      = google_secret_manager_secret.slack_bot_token_cloud_run_slack_bot.secret_id

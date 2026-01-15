@@ -59,57 +59,6 @@ func TestLoadConfig_MultiProject(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_LegacyMode(t *testing.T) {
-	// Set up environment variables for legacy mode
-	if err := os.Setenv("SLACK_BOT_TOKEN", "test-token"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("SLACK_SIGNING_SECRET", "test-secret"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("PROJECT", "legacy-project"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("REGION", "us-central1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("SLACK_CHANNEL", "default-channel"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Setenv("SERVICE_CHANNEL_MAPPING", "service1:team1,service2:team2"); err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() {
-		_ = os.Unsetenv("SLACK_BOT_TOKEN")
-		_ = os.Unsetenv("SLACK_SIGNING_SECRET")
-		_ = os.Unsetenv("PROJECT")
-		_ = os.Unsetenv("REGION")
-		_ = os.Unsetenv("SLACK_CHANNEL")
-		_ = os.Unsetenv("SERVICE_CHANNEL_MAPPING")
-	}()
-
-	config, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
-
-	if len(config.Projects) != 1 {
-		t.Errorf("Expected 1 project, got %d", len(config.Projects))
-	}
-
-	if config.Projects[0].ID != "legacy-project" {
-		t.Errorf("Expected legacy-project, got %s", config.Projects[0].ID)
-	}
-
-	if config.Projects[0].ServiceChannels["service1"] != "team1" {
-		t.Errorf("Expected team1, got %s", config.Projects[0].ServiceChannels["service1"])
-	}
-
-	if config.Projects[0].ServiceChannels["service2"] != "team2" {
-		t.Errorf("Expected team2, got %s", config.Projects[0].ServiceChannels["service2"])
-	}
-}
 
 func TestGetChannelForService(t *testing.T) {
 	config := &Config{

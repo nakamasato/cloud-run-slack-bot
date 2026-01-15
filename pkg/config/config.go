@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 )
 
 // ProjectConfig represents configuration for a single GCP project
@@ -85,46 +84,18 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Check for multi-project configuration
-	if projectsConfig := os.Getenv("PROJECTS_CONFIG"); projectsConfig != "" {
-		if err := json.Unmarshal([]byte(projectsConfig), &config.Projects); err != nil {
-			return nil, fmt.Errorf("failed to parse PROJECTS_CONFIG: %v", err)
-		}
-		// Validate the parsed configuration structure
-		if err := validateProjectsConfig(config.Projects); err != nil {
-			return nil, fmt.Errorf("invalid PROJECTS_CONFIG: %v", err)
-		}
-	} else {
-		// Fallback to single project configuration for backward compatibility
-		project := os.Getenv("PROJECT")
-		if project == "" {
-			return nil, fmt.Errorf("PROJECT env var is required when PROJECTS_CONFIG is not set")
-		}
+	projectsConfig := os.Getenv("PROJECTS_CONFIG")
+	if projectsConfig == "" {
+		return nil, fmt.Errorf("PROJECTS_CONFIG env var is required")
+	}
 
-		region := os.Getenv("REGION")
-		if region == "" {
-			return nil, fmt.Errorf("REGION env var is required when PROJECTS_CONFIG is not set")
-		}
+	if err := json.Unmarshal([]byte(projectsConfig), &config.Projects); err != nil {
+		return nil, fmt.Errorf("failed to parse PROJECTS_CONFIG: %v", err)
+	}
 
-		// Parse service-channel mapping for backward compatibility
-		serviceChannels := make(map[string]string)
-		if serviceChannelStr := os.Getenv("SERVICE_CHANNEL_MAPPING"); serviceChannelStr != "" {
-			pairs := strings.Split(serviceChannelStr, ",")
-			for _, pair := range pairs {
-				parts := strings.Split(pair, ":")
-				if len(parts) == 2 {
-					serviceChannels[parts[0]] = parts[1]
-				}
-			}
-		}
-
-		config.Projects = []ProjectConfig{
-			{
-				ID:              project,
-				Region:          region,
-				DefaultChannel:  config.DefaultChannel,
-				ServiceChannels: serviceChannels,
-			},
-		}
+	// Validate the parsed configuration structure
+	if err := validateProjectsConfig(config.Projects); err != nil {
+		return nil, fmt.Errorf("invalid PROJECTS_CONFIG: %v", err)
 	}
 
 	// Build channel-to-project mapping
