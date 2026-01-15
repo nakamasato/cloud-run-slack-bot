@@ -192,10 +192,10 @@ The debug feature uses Gemini AI via Vertex AI to analyze error logs. To enable:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DEBUG_ENABLED` | No | `false` | Set to `true` to enable the debug feature |
-| `DEBUG_VERTEX_PROJECT` | When enabled | - | GCP project ID for Vertex AI API access |
-| `DEBUG_VERTEX_LOCATION` | When enabled | - | GCP region for Vertex AI (e.g., `us-central1`) |
-| `DEBUG_MODEL_NAME` | No | `gemini-2.5-flash` | Gemini model to use for analysis |
-| `DEBUG_LOOKBACK_MINUTES` | No | `30` | Time window for error analysis (in minutes) |
+| `GCP_PROJECT_ID` | When enabled | - | GCP project ID for Vertex AI API access |
+| `VERTEX_LOCATION` | When enabled | - | GCP region for Vertex AI (e.g., `us-central1`) |
+| `MODEL_NAME` | No | `gemini-2.5-flash-lite` | Gemini model to use for analysis |
+| `DEBUG_TIME_WINDOW` | No | `30` | Time window for error analysis (in minutes) |
 
 **Usage**: `@bot debug` or `@bot dbg` to analyze recent errors for a Cloud Run service or job.
 

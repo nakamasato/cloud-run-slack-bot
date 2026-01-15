@@ -29,11 +29,11 @@ type Config struct {
 	TmpDir                string              `json:"-"`
 
 	// Debug feature configuration
-	DebugEnabled         bool   `json:"-"`
-	DebugVertexProject   string `json:"-"` // GCP project for Vertex AI
-	DebugVertexLocation  string `json:"-"` // GCP location for Vertex AI
-	DebugModelName       string `json:"-"` // Gemini model name
-	DebugLookbackMinutes int    `json:"-"` // How far back to look for errors
+	DebugEnabled    bool   `json:"-"`
+	GCPProjectID    string `json:"-"` // GCP project for Vertex AI
+	VertexLocation  string `json:"-"` // GCP location for Vertex AI
+	ModelName       string `json:"-"` // Gemini model name
+	DebugTimeWindow int    `json:"-"` // How far back to look for errors (minutes)
 }
 
 // validateProjectsConfig validates the structure of the parsed projects configuration
@@ -69,19 +69,19 @@ func LoadConfig() (*Config, error) {
 
 	// Load debug configuration
 	config.DebugEnabled = os.Getenv("DEBUG_ENABLED") == "true"
-	config.DebugVertexProject = os.Getenv("DEBUG_VERTEX_PROJECT")
-	config.DebugVertexLocation = os.Getenv("DEBUG_VERTEX_LOCATION")
-	config.DebugModelName = os.Getenv("DEBUG_MODEL_NAME")
-	if config.DebugModelName == "" {
-		config.DebugModelName = "gemini-2.5-flash"
+	config.GCPProjectID = os.Getenv("GCP_PROJECT_ID")
+	config.VertexLocation = os.Getenv("VERTEX_LOCATION")
+	config.ModelName = os.Getenv("MODEL_NAME")
+	if config.ModelName == "" {
+		config.ModelName = "gemini-2.5-flash-lite"
 	}
-	if lookback := os.Getenv("DEBUG_LOOKBACK_MINUTES"); lookback != "" {
-		if val, err := strconv.Atoi(lookback); err == nil {
-			config.DebugLookbackMinutes = val
+	if timeWindow := os.Getenv("DEBUG_TIME_WINDOW"); timeWindow != "" {
+		if val, err := strconv.Atoi(timeWindow); err == nil {
+			config.DebugTimeWindow = val
 		}
 	}
-	if config.DebugLookbackMinutes == 0 {
-		config.DebugLookbackMinutes = 30
+	if config.DebugTimeWindow == 0 {
+		config.DebugTimeWindow = 30
 	}
 
 	// Check for multi-project configuration
@@ -158,11 +158,11 @@ func (c *Config) Validate() error {
 
 	// Validate debug configuration
 	if c.DebugEnabled {
-		if c.DebugVertexProject == "" {
-			return fmt.Errorf("DEBUG_VERTEX_PROJECT is required when DEBUG_ENABLED=true")
+		if c.GCPProjectID == "" {
+			return fmt.Errorf("GCP_PROJECT_ID is required when DEBUG_ENABLED=true")
 		}
-		if c.DebugVertexLocation == "" {
-			return fmt.Errorf("DEBUG_VERTEX_LOCATION is required when DEBUG_ENABLED=true")
+		if c.VertexLocation == "" {
+			return fmt.Errorf("VERTEX_LOCATION is required when DEBUG_ENABLED=true")
 		}
 	}
 
@@ -266,9 +266,9 @@ func (c *Config) LogConfiguration() {
 	log.Printf("  Debug Feature:")
 	log.Printf("    - Enabled: %v", c.DebugEnabled)
 	if c.DebugEnabled {
-		log.Printf("    - Vertex Project: %s", c.DebugVertexProject)
-		log.Printf("    - Vertex Location: %s", c.DebugVertexLocation)
-		log.Printf("    - Model: %s", c.DebugModelName)
-		log.Printf("    - Lookback Minutes: %d", c.DebugLookbackMinutes)
+		log.Printf("    - GCP Project ID: %s", c.GCPProjectID)
+		log.Printf("    - Vertex Location: %s", c.VertexLocation)
+		log.Printf("    - Model: %s", c.ModelName)
+		log.Printf("    - Time Window: %d minutes", c.DebugTimeWindow)
 	}
 }

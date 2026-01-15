@@ -73,9 +73,9 @@ func main() {
 
 		// Initialize ADK agent (singleton)
 		adkAgent, err := adk.NewAgent(ctx, adk.Config{
-			Project:   cfg.DebugVertexProject,
-			Location:  cfg.DebugVertexLocation,
-			ModelName: cfg.DebugModelName,
+			Project:   cfg.GCPProjectID,
+			Location:  cfg.VertexLocation,
+			ModelName: cfg.ModelName,
 		})
 		if err != nil {
 			log.Fatalf("Failed to create ADK agent: %v", err)
@@ -83,7 +83,7 @@ func main() {
 
 		// Initialize debugger
 		debugger = debug.NewDebugger(lClients, adkAgent, debug.Config{
-			LookbackDuration: time.Duration(cfg.DebugLookbackMinutes) * time.Minute,
+			LookbackDuration: time.Duration(cfg.DebugTimeWindow) * time.Minute,
 		})
 	}
 
