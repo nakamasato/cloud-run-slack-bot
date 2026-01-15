@@ -86,12 +86,7 @@ func (c *Client) queryLogs(ctx context.Context, filter string) ([]LogEntry, erro
 	const maxEntries = 100 // Limit to prevent memory exhaustion and API quota issues
 
 	it := c.client.Entries(ctx, logadmin.Filter(filter), logadmin.NewestFirst())
-	for {
-		// Stop if we've reached the limit
-		if len(entries) >= maxEntries {
-			break
-		}
-
+	for len(entries) < maxEntries {
 		entry, err := it.Next()
 		if err == iterator.Done {
 			break
