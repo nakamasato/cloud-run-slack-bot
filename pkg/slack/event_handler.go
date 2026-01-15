@@ -1395,7 +1395,7 @@ func buildTraceLink(projectID, traceID string, cursorTimestamp time.Time) string
 	}
 
 	query := fmt.Sprintf(`trace="projects/%s/traces/%s"`, projectID, traceID)
-	escapedQuery := url.QueryEscape(query)
+	escapedQuery := url.PathEscape(query)
 	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
 	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s?project=%s",
 		escapedQuery, timestamp, projectID)
@@ -1425,7 +1425,7 @@ func buildLogLink(projectID, resourceType, resourceName string, lookback time.Du
 		return ""
 	}
 
-	escapedQuery := url.QueryEscape(filter)
+	escapedQuery := url.PathEscape(filter)
 	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
 	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s?project=%s",
 		escapedQuery, timestamp, projectID)
