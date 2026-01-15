@@ -112,17 +112,6 @@ graph TB
 - **Chart Generator**: Creates PNG visualizations for metrics data
 - **Audit Log Handler**: Processes real-time Cloud Run audit logs from Pub/Sub with project-specific routing
 
-### Backward Compatibility
-
-The bot maintains full backward compatibility with existing single-project deployments:
-
-- **Legacy Environment Variables**: Original `PROJECT`, `REGION`, and `SERVICE_CHANNEL_MAPPING` variables continue to work
-- **Existing Configurations**: No changes required for current deployments
-- **Seamless Migration**: Gradual migration path from single-project to multi-project setup
-- **Feature Parity**: All existing functionality remains unchanged
-
-For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
-
 ## Features
 
 1. **Multi-Project Support**: Monitor Cloud Run services and jobs across multiple GCP projects with intelligent channel-based project detection
@@ -134,18 +123,22 @@ For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-s
 3. **Real-time Notifications**: Receive notifications for Cloud Run audit logs with project-specific routing
 4. **Metrics Visualization**: Generate PNG charts for Cloud Run service metrics
 5. **Channel-based Project Detection**: Automatically detect target projects based on Slack channel configuration
-6. **Backward Compatibility**: Full support for existing single-project deployments
+6. **AI-Powered Error Analysis (Debug Feature)**: Analyze Cloud Run error logs using Gemini AI to group similar errors, identify root causes, and get actionable suggestions
 
-## Cloud Run
+## Setup
 
-### Roles
+### Cloud Run
+
+#### Roles
 
 1. `roles/run.viewer`: To get information of Cloud Run services
 1. `roles/monitoring.viewer`: To get metrics of Cloud Run services
+1. `roles/logging.viewer`: To read Cloud Logging entries (required for debug feature). Grant this role in each target project when using multi-project configuration.
+1. `roles/aiplatform.user`: To access Vertex AI Gemini API (required for debug feature). Grant this role on the project specified in `GCP_PROJECT_ID`. This role includes the `aiplatform.endpoints.predict` permission.
 
-### Environment Variables
+#### Environment Variables
 
-#### Multi-Project Configuration (Recommended)
+##### Multi-Project Configuration (Recommended)
 
 1. `PROJECTS_CONFIG`: JSON array of project configurations (see [Multi-Project Setup Guide](docs/multi-project-setup.md))
    ```json
@@ -167,13 +160,13 @@ For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-s
    ]
    ```
 
-#### Single-Project Configuration (Legacy - Still Supported)
+##### Single-Project Configuration (Legacy - Still Supported)
 
 1. `PROJECT`: GCP Project ID to monitor
 1. `REGION`: GCP Region to monitor
 1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
 
-#### Common Configuration
+##### Common Configuration
 
 1. `SLACK_BOT_TOKEN`: Slack Bot Token
 1. `SLACK_SIGNING_SECRET`: Slack bot signing secret
@@ -182,16 +175,33 @@ For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-s
 1. `SLACK_CHANNEL`: Default Slack Channel ID to receive notifications (used as fallback for all configurations)
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
 
+##### Debug Feature Configuration (Optional)
+
+The debug feature uses Gemini AI via Vertex AI to analyze error logs. To enable:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DEBUG_ENABLED` | No | `false` | Set to `true` to enable the debug feature |
+| `GCP_PROJECT_ID` | When enabled | - | GCP project ID for Vertex AI API access |
+| `VERTEX_LOCATION` | When enabled | - | GCP region for Vertex AI (e.g., `us-central1`) |
+| `MODEL_NAME` | No | `gemini-2.5-flash-lite` | Gemini model to use for analysis |
+| `DEBUG_TIME_WINDOW` | No | `30` | Time window for error analysis (in minutes) |
+
+**Usage**: `@bot debug` or `@bot dbg` to analyze recent errors for a Cloud Run service or job.
+
+**Required APIs** (must be enabled on the Vertex AI project):
+- Vertex AI API (`aiplatform.googleapis.com`)
+
 > **Note**: When using `PROJECTS_CONFIG`, the bot automatically generates channel-to-project mappings for intelligent project detection. For detailed configuration options, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
 
-### Deploy
+#### Deploy
 
 ```
 PROJECT=your-project
 REGION=asia-northeast1
 ```
 
-### Initial Setup
+#### Initial Setup
 
 ```shell
 echo -n "xoxb-xxxx" | gcloud secrets create slack-bot-token --replication-policy automatic --project "$PROJECT" --data-file=-
@@ -261,7 +271,7 @@ gcloud run deploy cloud-run-slack-bot \
 
 > **Note**: For comprehensive multi-project setup including IAM permissions and Pub/Sub configuration, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
 
-## Slack App
+### Slack App
 
 1. Create a new Slack App
     - [https://api.slack.com/apps](https://api.slack.com/apps)
@@ -277,7 +287,7 @@ gcloud run deploy cloud-run-slack-bot \
 1. Interactivity & Shortcuts
     - Request URL: `https://your-cloud-run-url/slack/interaction`
 
-## Slack Channel Settings
+### Slack Channel Settings
 
 1. Remove preview for console.cloud.google.com
 

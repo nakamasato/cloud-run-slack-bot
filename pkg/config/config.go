@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,13 @@ type Config struct {
 	SlackSigningSecret    string              `json:"-"`
 	SlackAppMode          string              `json:"-"`
 	TmpDir                string              `json:"-"`
+
+	// Debug feature configuration
+	DebugEnabled    bool   `json:"-"`
+	GCPProjectID    string `json:"-"` // GCP project for Vertex AI
+	VertexLocation  string `json:"-"` // GCP location for Vertex AI
+	ModelName       string `json:"-"` // Gemini model name
+	DebugTimeWindow int    `json:"-"` // How far back to look for errors (minutes)
 }
 
 // validateProjectsConfig validates the structure of the parsed projects configuration
@@ -57,6 +65,23 @@ func LoadConfig() (*Config, error) {
 		TmpDir:             os.Getenv("TMP_DIR"),
 		DefaultChannel:     os.Getenv("SLACK_CHANNEL"),
 		ChannelToProjects:  make(map[string][]string),
+	}
+
+	// Load debug configuration
+	config.DebugEnabled = os.Getenv("DEBUG_ENABLED") == "true"
+	config.GCPProjectID = os.Getenv("GCP_PROJECT_ID")
+	config.VertexLocation = os.Getenv("VERTEX_LOCATION")
+	config.ModelName = os.Getenv("MODEL_NAME")
+	if config.ModelName == "" {
+		config.ModelName = "gemini-2.5-flash-lite"
+	}
+	if timeWindow := os.Getenv("DEBUG_TIME_WINDOW"); timeWindow != "" {
+		if val, err := strconv.Atoi(timeWindow); err == nil {
+			config.DebugTimeWindow = val
+		}
+	}
+	if config.DebugTimeWindow == 0 {
+		config.DebugTimeWindow = 30
 	}
 
 	// Check for multi-project configuration
@@ -128,6 +153,16 @@ func (c *Config) Validate() error {
 		}
 		if project.Region == "" {
 			return fmt.Errorf("project %d: region is required", i)
+		}
+	}
+
+	// Validate debug configuration
+	if c.DebugEnabled {
+		if c.GCPProjectID == "" {
+			return fmt.Errorf("GCP_PROJECT_ID is required when DEBUG_ENABLED=true")
+		}
+		if c.VertexLocation == "" {
+			return fmt.Errorf("VERTEX_LOCATION is required when DEBUG_ENABLED=true")
 		}
 	}
 
@@ -227,5 +262,13 @@ func (c *Config) LogConfiguration() {
 		} else {
 			log.Printf("    - Channel '%s' -> Projects %v (manual selection required)", channel, projects)
 		}
+	}
+	log.Printf("  Debug Feature:")
+	log.Printf("    - Enabled: %v", c.DebugEnabled)
+	if c.DebugEnabled {
+		log.Printf("    - GCP Project ID: %s", c.GCPProjectID)
+		log.Printf("    - Vertex Location: %s", c.VertexLocation)
+		log.Printf("    - Model: %s", c.ModelName)
+		log.Printf("    - Time Window: %d minutes", c.DebugTimeWindow)
 	}
 }

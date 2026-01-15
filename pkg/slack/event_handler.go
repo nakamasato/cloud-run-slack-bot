@@ -2,8 +2,10 @@ package slack
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/debug"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/visualize"
 	"github.com/slack-go/slack"
@@ -22,6 +25,7 @@ const (
 	ActionIdDescribeResource = "select-resource-for-describe"
 	ActionIdMetricsResource  = "select-resource-for-metrics"
 	ActionIdCurrentResource  = "select-current-resource"
+	ActionIdDebugResource    = "select-resource-for-debug"
 	ActionIdMetrics          = "metrics"
 	defaultDuration          = 24 * time.Hour
 	defaultAggregationPeriod = 5 * time.Minute
@@ -330,7 +334,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 		displayName := fmt.Sprintf("[SVC] %s", svcName)
 		value := fmt.Sprintf("service:%s", svcName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -340,7 +344,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 		displayName := fmt.Sprintf("[JOB] %s", jobName)
 		value := fmt.Sprintf("job:%s", jobName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -374,7 +378,6 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 	))
 	return err
 }
-
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName, metricsType string, duration, aggregationPeriod time.Duration) error {
 	now := time.Now().UTC()
@@ -637,16 +640,18 @@ type MultiProjectSlackEventHandler struct {
 	client   *slack.Client
 	mClients map[string]*monitoring.Client
 	rClients map[string]*cloudrun.Client
+	debugger *debug.Debugger // nil if debug feature is disabled
 	memory   *Memory
 	tmpDir   string
 	config   *config.Config
 }
 
-func NewMultiProjectSlackEventHandler(client *slack.Client, rClients map[string]*cloudrun.Client, mClients map[string]*monitoring.Client, tmpDir string, cfg *config.Config) *MultiProjectSlackEventHandler {
+func NewMultiProjectSlackEventHandler(client *slack.Client, rClients map[string]*cloudrun.Client, mClients map[string]*monitoring.Client, debugger *debug.Debugger, tmpDir string, cfg *config.Config) *MultiProjectSlackEventHandler {
 	return &MultiProjectSlackEventHandler{
 		client:   client,
 		rClients: rClients,
 		mClients: mClients,
+		debugger: debugger,
 		memory:   NewMemory(),
 		tmpDir:   tmpDir,
 		config:   cfg,
@@ -681,6 +686,16 @@ func (h *MultiProjectSlackEventHandler) HandleEvent(event *slackevents.EventsAPI
 				return h.listResourcesForChannel(ctx, e.Channel, ActionIdMetricsResource, channelProjects)
 			}
 			return h.getResourceMetrics(ctx, e.Channel, currentItem, "count", defaultDuration, defaultAggregationPeriod)
+		case "debug", "dbg":
+			if h.debugger == nil {
+				_, err := h.client.PostEphemeralContext(ctx, e.Channel, e.User,
+					slack.MsgOptionText("Debug feature is not enabled. Set DEBUG_ENABLED=true to enable.", false))
+				return err
+			}
+			if !ok {
+				return h.listResourcesForChannel(ctx, e.Channel, ActionIdDebugResource, channelProjects)
+			}
+			return h.debugResource(ctx, e.Channel, e.User, currentItem)
 		case "set", "s":
 			return h.listResourcesForChannel(ctx, e.Channel, ActionIdCurrentResource, channelProjects)
 		case "help", "h":
@@ -706,7 +721,7 @@ func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.Int
 		if err != nil {
 			return fmt.Errorf("failed to parse multi-project resource value: %v", err)
 		}
-		_ = projectID // Used in action handlers below
+		_ = projectID    // Used in action handlers below
 		_ = resourceName // Used in action handlers below
 
 		switch action.ActionID {
@@ -716,6 +731,14 @@ func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.Int
 		case ActionIdMetricsResource:
 			h.memory.Set(interaction.User.ID, value, resourceType)
 			return h.getResourceMetrics(ctx, interaction.Channel.ID, value, "count", defaultDuration, defaultAggregationPeriod)
+		case ActionIdDebugResource:
+			if h.debugger == nil {
+				_, err := h.client.PostEphemeralContext(ctx, interaction.Channel.ID, interaction.User.ID,
+					slack.MsgOptionText("Debug feature is not enabled.", false))
+				return err
+			}
+			h.memory.Set(interaction.User.ID, value, resourceType)
+			return h.debugResource(ctx, interaction.Channel.ID, interaction.User.ID, value)
 		case ActionIdCurrentResource:
 			return h.setCurrentResource(ctx, interaction.Channel.ID, interaction.User.ID, value, resourceType)
 		}
@@ -782,7 +805,7 @@ func (h *MultiProjectSlackEventHandler) listSingleProjectResources(ctx context.C
 		displayName := fmt.Sprintf("[SVC] %s", svcName) // No need to show project ID
 		value := fmt.Sprintf("%s:service:%s", projectID, svcName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -798,7 +821,7 @@ func (h *MultiProjectSlackEventHandler) listSingleProjectResources(ctx context.C
 		displayName := fmt.Sprintf("[JOB] %s", jobName) // No need to show project ID
 		value := fmt.Sprintf("%s:job:%s", projectID, jobName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -853,7 +876,7 @@ func (h *MultiProjectSlackEventHandler) listAllProjects(ctx context.Context, cha
 			displayName := fmt.Sprintf("[%s] [SVC] %s", project.ID, svcName)
 			value := fmt.Sprintf("%s:service:%s", project.ID, svcName)
 			options = append(options, &slack.OptionBlockObject{
-				Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+				Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 				Value: value,
 			})
 		}
@@ -869,7 +892,7 @@ func (h *MultiProjectSlackEventHandler) listAllProjects(ctx context.Context, cha
 			displayName := fmt.Sprintf("[%s] [JOB] %s", project.ID, jobName)
 			value := fmt.Sprintf("%s:job:%s", project.ID, jobName)
 			options = append(options, &slack.OptionBlockObject{
-				Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+				Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 				Value: value,
 			})
 		}
@@ -1204,22 +1227,32 @@ func (h *MultiProjectSlackEventHandler) sample(ctx context.Context, channelId st
 }
 
 func (h *MultiProjectSlackEventHandler) help(ctx context.Context, channelId, userId string) error {
-	attachment := slack.Attachment{
-		Text: "Available commands (Multi-Project Mode):",
-		Fields: []slack.AttachmentField{
-			{
-				Title: "`describe` or `d`",
-				Value: "describe the target Cloud Run service or job from any configured project.\n you can check the latest revision, last modifier, update time, etc.",
-			},
-			{
-				Title: "`metrics` or `m`",
-				Value: "show the request count of the target Cloud Run service or job description.\n for services, you can check the request count per revision across all projects.",
-			},
-			{
-				Title: "`set` or `s`",
-				Value: "set the target Cloud Run service or job from any configured project.\n this displays a list of both services and jobs from all projects to select from.",
-			},
+	fields := []slack.AttachmentField{
+		{
+			Title: "`describe` or `d`",
+			Value: "describe the target Cloud Run service or job from any configured project.\n you can check the latest revision, last modifier, update time, etc.",
 		},
+		{
+			Title: "`metrics` or `m`",
+			Value: "show the request count of the target Cloud Run service or job description.\n for services, you can check the request count per revision across all projects.",
+		},
+		{
+			Title: "`set` or `s`",
+			Value: "set the target Cloud Run service or job from any configured project.\n this displays a list of both services and jobs from all projects to select from.",
+		},
+	}
+
+	// Add debug command if enabled
+	if h.debugger != nil {
+		fields = append(fields, slack.AttachmentField{
+			Title: "`debug` or `dbg`",
+			Value: "analyze recent error logs for the target Cloud Run service or job using AI.\n groups similar errors and provides root cause analysis and suggestions.",
+		})
+	}
+
+	attachment := slack.Attachment{
+		Text:   "Available commands (Multi-Project Mode):",
+		Fields: fields,
 	}
 	_, err := h.client.PostEphemeralContext(
 		ctx, channelId, userId,
@@ -1227,4 +1260,175 @@ func (h *MultiProjectSlackEventHandler) help(ctx context.Context, channelId, use
 		slack.MsgOptionAttachments(attachment),
 	)
 	return err
+}
+
+func (h *MultiProjectSlackEventHandler) debugResource(ctx context.Context, channelId, userId, resourceValue string) error {
+	projectID, resourceType, resourceName, err := ParseMultiProjectResourceValue(resourceValue)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource value: %v", err)
+	}
+
+	// Send initial "analyzing" message
+	_, err = h.client.PostEphemeralContext(ctx, channelId, userId,
+		slack.MsgOptionText(fmt.Sprintf("Analyzing errors for %s `%s` in project `%s`... This may take a moment.", resourceType, resourceName, projectID), false))
+	if err != nil {
+		log.Printf("Warning: failed to send analyzing message: %v", err)
+	}
+
+	// Run debug analysis with timeout
+	analysisCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	result, err := h.debugger.DebugResource(analysisCtx, projectID, resourceType, resourceName)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			_, _, postErr := h.client.PostMessageContext(ctx, channelId,
+				slack.MsgOptionText("Debug analysis timed out. The service may have too many errors or the AI service is slow. Try reducing the lookback window.", false))
+			if postErr != nil {
+				return postErr
+			}
+			return err
+		}
+		_, _, postErr := h.client.PostMessageContext(ctx, channelId,
+			slack.MsgOptionText(fmt.Sprintf("Debug analysis failed: %s", err.Error()), false))
+		if postErr != nil {
+			return postErr
+		}
+		return err
+	}
+
+	return h.postDebugResult(ctx, channelId, result)
+}
+
+func (h *MultiProjectSlackEventHandler) postDebugResult(ctx context.Context, channelId string, result *debug.DebugResult) error {
+	if result.TotalErrors == 0 {
+		_, _, err := h.client.PostMessageContext(ctx, channelId,
+			slack.MsgOptionText(fmt.Sprintf("No errors found for %s `%s` in project `%s` (last %d minutes).",
+				result.ResourceType, result.ResourceName, result.ProjectID, result.LookbackMin), false))
+		return err
+	}
+
+	// Build header text
+	headerText := fmt.Sprintf("Debug Analysis: %s `%s` (Project: `%s`)\nTime Range: Last %d minutes | Total Errors: %d | Error Groups: %d",
+		result.ResourceType, result.ResourceName, result.ProjectID, result.LookbackMin, result.TotalErrors, len(result.ErrorGroups))
+	logLink := buildLogLink(result.ProjectID, result.ResourceType, result.ResourceName, time.Duration(result.LookbackMin)*time.Minute, result.GeneratedAt)
+	if logLink != "" {
+		headerText = fmt.Sprintf("%s\nLog: <%s|Log>", headerText, logLink)
+	}
+
+	_, threadTS, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText(headerText, false))
+	if err != nil {
+		return err
+	}
+
+	for i, group := range result.ErrorGroups {
+		groupTitle := fmt.Sprintf("Group %d: %s. (%d errors)", i+1, group.Pattern, group.ErrorCount)
+
+		summary := group.Analysis.Summary
+		if summary == "" {
+			summary = "N/A"
+		}
+
+		possibleCauses := "None"
+		if len(group.Analysis.PossibleCauses) > 0 {
+			possibleCauses = strings.Join(group.Analysis.PossibleCauses, "\n")
+		}
+
+		suggestions := "None"
+		if len(group.Analysis.Suggestions) > 0 {
+			suggestions = strings.Join(group.Analysis.Suggestions, "\n")
+		}
+
+		traceValue := "None"
+		if group.TraceID != "" {
+			traceLink := buildTraceLink(result.ProjectID, group.TraceID, group.TraceTimestamp)
+			if traceLink == "" {
+				traceValue = fmt.Sprintf("`%s`", group.TraceID)
+			} else {
+				traceValue = fmt.Sprintf("<%s|%s>", traceLink, group.TraceID)
+			}
+		}
+
+		attachment := slack.Attachment{
+			Color: "danger",
+			Title: groupTitle,
+			Fields: []slack.AttachmentField{
+				{
+					Title: "Summary",
+					Value: summary,
+					Short: false,
+				},
+				{
+					Title: "Possible Causes",
+					Value: possibleCauses,
+					Short: false,
+				},
+				{
+					Title: "Suggestions",
+					Value: suggestions,
+					Short: false,
+				},
+				{
+					Title: "Sample Trace",
+					Value: traceValue,
+					Short: false,
+				},
+			},
+			MarkdownIn: []string{"fields"},
+		}
+
+		_, _, postErr := h.client.PostMessageContext(ctx, channelId,
+			slack.MsgOptionAttachments(attachment),
+			slack.MsgOptionTS(threadTS),
+		)
+		if postErr != nil {
+			return postErr
+		}
+	}
+
+	return nil
+}
+
+func buildTraceLink(projectID, traceID string, cursorTimestamp time.Time) string {
+	if projectID == "" || traceID == "" || cursorTimestamp.IsZero() {
+		return ""
+	}
+
+	query := fmt.Sprintf(`trace="projects/%s/traces/%s"`, projectID, traceID)
+	escapedQuery := url.PathEscape(query)
+	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
+	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s?project=%s",
+		escapedQuery, timestamp, projectID)
+}
+
+func buildLogLink(projectID, resourceType, resourceName string, lookback time.Duration, cursorTimestamp time.Time) string {
+	if projectID == "" || resourceType == "" || resourceName == "" || lookback <= 0 || cursorTimestamp.IsZero() {
+		return ""
+	}
+
+	startTime := cursorTimestamp.Add(-lookback)
+	var filter string
+	switch resourceType {
+	case "service":
+		filter = fmt.Sprintf(
+			"resource.type = \"cloud_run_revision\"\nresource.labels.service_name = \"%s\"\nseverity>=ERROR\ntimestamp>\"%s\"",
+			resourceName,
+			startTime.Format(time.RFC3339),
+		)
+	case "job":
+		filter = fmt.Sprintf(
+			"resource.type = \"cloud_run_job\"\nresource.labels.job_name = \"%s\"\nseverity>=ERROR\ntimestamp>\"%s\"",
+			resourceName,
+			startTime.Format(time.RFC3339),
+		)
+	default:
+		return ""
+	}
+
+	escapedQuery := url.PathEscape(filter)
+	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
+	// Convert lookback duration to ISO 8601 duration format for the URL
+	durationStr := fmt.Sprintf("PT%dM", int(lookback.Minutes()))
+	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s;duration=%s?project=%s",
+		escapedQuery, timestamp, durationStr, projectID)
 }
