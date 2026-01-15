@@ -41,14 +41,14 @@ type ErrorAnalysis struct {
 	Suggestions    []string // Actionable suggestions
 }
 
-// Agent wraps the GenAI client for error analysis.
-type Agent struct {
+// DebugAgent wraps the GenAI client for error analysis.
+type DebugAgent struct {
 	client *genai.Client
 	model  string
 }
 
-// NewAgent creates a new agent configured for Vertex AI.
-func NewAgent(ctx context.Context, cfg Config) (*Agent, error) {
+// NewDebugAgent creates a new agent configured for Vertex AI.
+func NewDebugAgent(ctx context.Context, cfg Config) (*DebugAgent, error) {
 	clientConfig := &genai.ClientConfig{
 		Project:  cfg.Project,
 		Location: cfg.Location,
@@ -61,7 +61,7 @@ func NewAgent(ctx context.Context, cfg Config) (*Agent, error) {
 	}
 
 	log.Printf("GenAI agent created with model %s (project: %s, location: %s)\n", cfg.ModelName, cfg.Project, cfg.Location)
-	return &Agent{client: client, model: cfg.ModelName}, nil
+	return &DebugAgent{client: client, model: cfg.ModelName}, nil
 }
 
 var groupResponseSchema = &genai.Schema{
@@ -111,7 +111,7 @@ var analysisResponseSchema = &genai.Schema{
 }
 
 // generateContent is a helper method to generate content from the LLM.
-func (a *Agent) generateContent(ctx context.Context, prompt string, outputSchema *genai.Schema) (string, error) {
+func (a *DebugAgent) generateContent(ctx context.Context, prompt string, outputSchema *genai.Schema) (string, error) {
 	var cfg *genai.GenerateContentConfig
 	if outputSchema != nil {
 		cfg = &genai.GenerateContentConfig{
@@ -134,7 +134,7 @@ func (a *Agent) generateContent(ctx context.Context, prompt string, outputSchema
 }
 
 // GroupErrors uses LLM to group similar errors.
-func (a *Agent) GroupErrors(ctx context.Context, errors []ErrorLog) ([]ErrorGroup, error) {
+func (a *DebugAgent) GroupErrors(ctx context.Context, errors []ErrorLog) ([]ErrorGroup, error) {
 	if len(errors) == 0 {
 		return nil, nil
 	}
@@ -221,7 +221,7 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 }
 
 // AnalyzeErrors uses LLM to analyze an error group with optional trace context.
-func (a *Agent) AnalyzeErrors(ctx context.Context, group ErrorGroup, traceLogs []string) (*ErrorAnalysis, error) {
+func (a *DebugAgent) AnalyzeErrors(ctx context.Context, group ErrorGroup, traceLogs []string) (*ErrorAnalysis, error) {
 	var traceContext string
 	if len(traceLogs) > 0 {
 		traceContext = fmt.Sprintf("\n\nTrace Context (related logs):\n%s", strings.Join(traceLogs, "\n"))

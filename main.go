@@ -72,7 +72,7 @@ func main() {
 		}
 
 		// Initialize ADK agent (singleton)
-		adkAgent, err := adk.NewAgent(ctx, adk.Config{
+		adkAgent, err := adk.NewDebugAgent(ctx, adk.Config{
 			Project:   cfg.GCPProjectID,
 			Location:  cfg.VertexLocation,
 			ModelName: cfg.ModelName,

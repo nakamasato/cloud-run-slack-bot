@@ -13,12 +13,12 @@ import (
 // Debugger orchestrates the debug workflow.
 type Debugger struct {
 	lClients map[string]*logging.Client
-	agent    *adk.Agent
+	agent    *adk.DebugAgent
 	config   Config
 }
 
 // NewDebugger creates a new debugger.
-func NewDebugger(lClients map[string]*logging.Client, agent *adk.Agent, cfg Config) *Debugger {
+func NewDebugger(lClients map[string]*logging.Client, agent *adk.DebugAgent, cfg Config) *Debugger {
 	return &Debugger{
 		lClients: lClients,
 		agent:    agent,
