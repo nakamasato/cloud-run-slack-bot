@@ -3,6 +3,7 @@ package logging
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -111,7 +112,13 @@ func (c *Client) queryLogs(ctx context.Context, filter string) ([]LogEntry, erro
 				} else if textPayload, ok := p["textPayload"].(string); ok {
 					logEntry.Message = textPayload
 				} else {
-					logEntry.Message = fmt.Sprintf("%v", p)
+					// Fallback to serializing the whole payload as JSON, which is better for LLM analysis than the Go map format
+					jsonBytes, err := json.Marshal(p)
+					if err == nil {
+						logEntry.Message = string(jsonBytes)
+					} else {
+						logEntry.Message = fmt.Sprintf("%v", p)
+					}
 				}
 			default:
 				logEntry.Message = fmt.Sprintf("%v", p)
