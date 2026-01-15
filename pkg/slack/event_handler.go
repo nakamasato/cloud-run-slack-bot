@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -332,7 +333,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 		displayName := fmt.Sprintf("[SVC] %s", svcName)
 		value := fmt.Sprintf("service:%s", svcName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -342,7 +343,7 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 		displayName := fmt.Sprintf("[JOB] %s", jobName)
 		value := fmt.Sprintf("job:%s", jobName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -376,7 +377,6 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 	))
 	return err
 }
-
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName, metricsType string, duration, aggregationPeriod time.Duration) error {
 	now := time.Now().UTC()
@@ -720,7 +720,7 @@ func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.Int
 		if err != nil {
 			return fmt.Errorf("failed to parse multi-project resource value: %v", err)
 		}
-		_ = projectID // Used in action handlers below
+		_ = projectID    // Used in action handlers below
 		_ = resourceName // Used in action handlers below
 
 		switch action.ActionID {
@@ -804,7 +804,7 @@ func (h *MultiProjectSlackEventHandler) listSingleProjectResources(ctx context.C
 		displayName := fmt.Sprintf("[SVC] %s", svcName) // No need to show project ID
 		value := fmt.Sprintf("%s:service:%s", projectID, svcName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -820,7 +820,7 @@ func (h *MultiProjectSlackEventHandler) listSingleProjectResources(ctx context.C
 		displayName := fmt.Sprintf("[JOB] %s", jobName) // No need to show project ID
 		value := fmt.Sprintf("%s:job:%s", projectID, jobName)
 		options = append(options, &slack.OptionBlockObject{
-			Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+			Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 			Value: value,
 		})
 	}
@@ -875,7 +875,7 @@ func (h *MultiProjectSlackEventHandler) listAllProjects(ctx context.Context, cha
 			displayName := fmt.Sprintf("[%s] [SVC] %s", project.ID, svcName)
 			value := fmt.Sprintf("%s:service:%s", project.ID, svcName)
 			options = append(options, &slack.OptionBlockObject{
-				Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+				Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 				Value: value,
 			})
 		}
@@ -891,7 +891,7 @@ func (h *MultiProjectSlackEventHandler) listAllProjects(ctx context.Context, cha
 			displayName := fmt.Sprintf("[%s] [JOB] %s", project.ID, jobName)
 			value := fmt.Sprintf("%s:job:%s", project.ID, jobName)
 			options = append(options, &slack.OptionBlockObject{
-				Text: &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
+				Text:  &slack.TextBlockObject{Type: slack.PlainTextType, Text: displayName},
 				Value: value,
 			})
 		}
@@ -1301,9 +1301,8 @@ func (h *MultiProjectSlackEventHandler) postDebugResult(ctx context.Context, cha
 		result.ResourceType, result.ResourceName, result.ProjectID, result.LookbackMin, result.TotalErrors, len(result.ErrorGroups))
 
 	// Build fields for each error group
-	var fields []slack.AttachmentField
+	var attachments []slack.Attachment
 	for i, group := range result.ErrorGroups {
-		// Summary field
 		groupTitle := fmt.Sprintf("Group %d: %s (%d errors)", i+1, group.Pattern, group.ErrorCount)
 
 		// Build group details
@@ -1325,24 +1324,37 @@ func (h *MultiProjectSlackEventHandler) postDebugResult(ctx context.Context, cha
 		}
 
 		if group.TraceID != "" {
-			details.WriteString(fmt.Sprintf("*Sample Trace*: `%s`", group.TraceID))
+			traceLink := buildTraceLink(result.ProjectID, group.TraceID, group.TraceTimestamp)
+			if traceLink == "" {
+				details.WriteString(fmt.Sprintf("*Sample Trace*: `%s`", group.TraceID))
+			} else {
+				details.WriteString(fmt.Sprintf("<%s|Sample Trace: %s>", traceLink, group.TraceID))
+			}
 		}
 
-		fields = append(fields, slack.AttachmentField{
-			Title: groupTitle,
-			Value: details.String(),
-			Short: false,
+		attachments = append(attachments, slack.Attachment{
+			Color:      "danger",
+			Title:      groupTitle,
+			Text:       details.String(),
+			MarkdownIn: []string{"text"},
+			Footer:     fmt.Sprintf("Generated at %s", result.GeneratedAt.Format("2006/01/02 15:04:05")),
 		})
-	}
-
-	attachment := slack.Attachment{
-		Color:  "danger",
-		Fields: fields,
-		Footer: fmt.Sprintf("Generated at %s", result.GeneratedAt.Format("2006/01/02 15:04:05")),
 	}
 
 	_, _, err := h.client.PostMessageContext(ctx, channelId,
 		slack.MsgOptionText(headerText, false),
-		slack.MsgOptionAttachments(attachment))
+		slack.MsgOptionAttachments(attachments...))
 	return err
+}
+
+func buildTraceLink(projectID, traceID string, cursorTimestamp time.Time) string {
+	if projectID == "" || traceID == "" || cursorTimestamp.IsZero() {
+		return ""
+	}
+
+	query := fmt.Sprintf(`trace="projects/%s/traces/%s"`, projectID, traceID)
+	escapedQuery := url.QueryEscape(query)
+	timestamp := cursorTimestamp.UTC().Format("2006-01-02T15:04:05.000Z")
+	return fmt.Sprintf("https://console.cloud.google.com/logs/query;query=%s;cursorTimestamp=%s?project=%s",
+		escapedQuery, timestamp, projectID)
 }

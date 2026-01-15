@@ -80,6 +80,7 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 			ErrorCount:     group.Count,
 			Representative: group.Representative.Message,
 			TraceID:        group.Representative.TraceID,
+			TraceTimestamp: group.Representative.Timestamp,
 		}
 
 		// Get trace logs if available

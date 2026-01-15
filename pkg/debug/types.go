@@ -29,5 +29,6 @@ type ErrorGroupResult struct {
 	ErrorCount     int               // Number of errors in this group
 	Representative string            // Representative error message
 	TraceID        string            // Representative trace ID for this group
+	TraceTimestamp time.Time         // Representative trace timestamp for this group
 	Analysis       adk.ErrorAnalysis // LLM analysis of this group
 }
