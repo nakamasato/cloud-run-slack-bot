@@ -3,10 +3,14 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/adk"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrun"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrunslackbot"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/debug"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
@@ -50,6 +54,39 @@ func main() {
 		rClients[project.ID] = rClient
 	}
 
+	// Initialize debug feature if enabled
+	var lClients map[string]*logging.Client
+	var debugger *debug.Debugger
+
+	if cfg.DebugEnabled {
+		log.Println("Debug feature enabled, initializing logging clients and ADK agent...")
+
+		// Initialize logging clients per project
+		lClients = make(map[string]*logging.Client)
+		for _, project := range cfg.Projects {
+			lClient, err := logging.NewLoggingClient(ctx, project.ID)
+			if err != nil {
+				log.Fatalf("Failed to create logging client for project %s: %v", project.ID, err)
+			}
+			lClients[project.ID] = lClient
+		}
+
+		// Initialize ADK agent (singleton)
+		adkAgent, err := adk.NewAgent(ctx, adk.Config{
+			Project:   cfg.DebugVertexProject,
+			Location:  cfg.DebugVertexLocation,
+			ModelName: cfg.DebugModelName,
+		})
+		if err != nil {
+			log.Fatalf("Failed to create ADK agent: %v", err)
+		}
+
+		// Initialize debugger
+		debugger = debug.NewDebugger(lClients, adkAgent, debug.Config{
+			LookbackDuration: time.Duration(cfg.DebugLookbackMinutes) * time.Minute,
+		})
+	}
+
 	// Ensure proper cleanup
 	defer func() {
 		for projectID, mClient := range mClients {
@@ -62,6 +99,11 @@ func main() {
 				log.Printf("Failed to close Cloud Run client for project %s: %v", projectID, err)
 			}
 		}
+		for projectID, lClient := range lClients {
+			if err := lClient.Close(); err != nil {
+				log.Printf("Failed to close logging client for project %s: %v", projectID, err)
+			}
+		}
 	}()
 
 	// Setup Slack client
@@ -72,7 +114,7 @@ func main() {
 	sClient := slack.New(cfg.SlackBotToken, ops...)
 
 	// Create multi-project handler
-	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, cfg.TmpDir, cfg)
+	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, debugger, cfg.TmpDir, cfg)
 
 	// Create service with multi-project support
 	svc := cloudrunslackbot.NewMultiProjectCloudRunSlackBotService(

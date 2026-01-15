@@ -135,6 +135,7 @@ For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-s
 4. **Metrics Visualization**: Generate PNG charts for Cloud Run service metrics
 5. **Channel-based Project Detection**: Automatically detect target projects based on Slack channel configuration
 6. **Backward Compatibility**: Full support for existing single-project deployments
+7. **AI-Powered Error Analysis (Debug Feature)**: Analyze Cloud Run error logs using Gemini AI to group similar errors, identify root causes, and get actionable suggestions
 
 ## Cloud Run
 
@@ -142,6 +143,8 @@ For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-s
 
 1. `roles/run.viewer`: To get information of Cloud Run services
 1. `roles/monitoring.viewer`: To get metrics of Cloud Run services
+1. `roles/logging.viewer`: To read Cloud Logging entries (required for debug feature)
+1. `roles/aiplatform.user`: To access Vertex AI Gemini API (required for debug feature)
 
 ### Environment Variables
 
@@ -181,6 +184,26 @@ For migration guidance, see the [Multi-Project Setup Guide](docs/multi-project-s
 1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
 1. `SLACK_CHANNEL`: Default Slack Channel ID to receive notifications (used as fallback for all configurations)
 1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
+
+#### Debug Feature Configuration (Optional)
+
+The debug feature uses Gemini AI via Vertex AI to analyze error logs. To enable:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DEBUG_ENABLED` | No | `false` | Set to `true` to enable the debug feature |
+| `DEBUG_VERTEX_PROJECT` | When enabled | - | GCP project ID for Vertex AI API access |
+| `DEBUG_VERTEX_LOCATION` | When enabled | - | GCP region for Vertex AI (e.g., `us-central1`) |
+| `DEBUG_MODEL_NAME` | No | `gemini-2.5-flash` | Gemini model to use for analysis |
+| `DEBUG_LOOKBACK_MINUTES` | No | `30` | Time window for error analysis (in minutes) |
+
+**Usage**: `@bot debug` or `@bot dbg` to analyze recent errors for a Cloud Run service or job.
+
+**Required IAM Permissions** (on the Vertex AI project):
+- `aiplatform.endpoints.predict` - Access Vertex AI Gemini API
+
+**Required APIs** (must be enabled on the Vertex AI project):
+- Vertex AI API (`aiplatform.googleapis.com`)
 
 > **Note**: When using `PROJECTS_CONFIG`, the bot automatically generates channel-to-project mappings for intelligent project detection. For detailed configuration options, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
 

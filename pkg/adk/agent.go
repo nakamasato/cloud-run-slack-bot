@@ -1,0 +1,224 @@
+// Package adk provides a GenAI client wrapper for error analysis using Gemini via Vertex AI.
+package adk
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"google.golang.org/genai"
+)
+
+// Config for agent initialization.
+type Config struct {
+	Project   string // GCP project for Vertex AI
+	Location  string // GCP location (e.g., "us-central1")
+	ModelName string // Gemini model (e.g., "gemini-2.5-flash")
+}
+
+// ErrorLog is input for error grouping.
+type ErrorLog struct {
+	Message   string
+	Timestamp time.Time
+	TraceID   string
+}
+
+// ErrorGroup represents a group of similar errors.
+type ErrorGroup struct {
+	Pattern        string     // Pattern describing this group
+	Representative ErrorLog   // Representative error for this group
+	SimilarErrors  []ErrorLog // Other errors in this group
+	Count          int        // Total count of errors in this group
+}
+
+// ErrorAnalysis is the LLM analysis result.
+type ErrorAnalysis struct {
+	Summary        string   // Brief summary of the error group
+	PossibleCauses []string // Possible root causes
+	Suggestions    []string // Actionable suggestions
+}
+
+// Agent wraps the GenAI client for error analysis.
+type Agent struct {
+	client *genai.Client
+	model  string
+}
+
+// NewAgent creates a new agent configured for Vertex AI.
+func NewAgent(ctx context.Context, cfg Config) (*Agent, error) {
+	clientConfig := &genai.ClientConfig{
+		Project:  cfg.Project,
+		Location: cfg.Location,
+		Backend:  genai.BackendVertexAI,
+	}
+
+	client, err := genai.NewClient(ctx, clientConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GenAI client: %w", err)
+	}
+
+	log.Printf("GenAI agent created with model %s (project: %s, location: %s)\n", cfg.ModelName, cfg.Project, cfg.Location)
+	return &Agent{client: client, model: cfg.ModelName}, nil
+}
+
+// generateContent is a helper method to generate content from the LLM.
+func (a *Agent) generateContent(ctx context.Context, prompt string) (string, error) {
+	result, err := a.client.Models.GenerateContent(ctx, a.model, genai.Text(prompt), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate content: %w", err)
+	}
+
+	// Use the Text() helper method to get concatenated text from all parts
+	text := result.Text()
+	if text == "" {
+		return "", fmt.Errorf("no text content in response")
+	}
+	return text, nil
+}
+
+// GroupErrors uses LLM to group similar errors.
+func (a *Agent) GroupErrors(ctx context.Context, errors []ErrorLog) ([]ErrorGroup, error) {
+	if len(errors) == 0 {
+		return nil, nil
+	}
+
+	// Prepare error messages for the prompt
+	var errorMessages []string
+	for i, e := range errors {
+		errorMessages = append(errorMessages, fmt.Sprintf("%d. [%s] %s", i+1, e.Timestamp.Format(time.RFC3339), e.Message))
+	}
+
+	prompt := fmt.Sprintf(`You are an expert at analyzing error logs. Given the following error messages, group them by similarity (same root cause or pattern).
+
+Error Messages:
+%s
+
+Respond with a JSON array of error groups. Each group should have:
+- "pattern": A brief description of the error pattern
+- "indices": An array of 1-based indices of errors belonging to this group
+
+Example response:
+[
+  {"pattern": "Database connection timeout", "indices": [1, 3, 5]},
+  {"pattern": "Authentication failure", "indices": [2, 4]}
+]
+
+Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n"))
+
+	result, err := a.generateContent(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run LLM for grouping: %w", err)
+	}
+
+	// Parse the response
+	var groupResponse []struct {
+		Pattern string `json:"pattern"`
+		Indices []int  `json:"indices"`
+	}
+
+	// Clean up response (remove markdown code blocks if present)
+	responseText := strings.TrimSpace(result)
+	responseText = strings.TrimPrefix(responseText, "```json")
+	responseText = strings.TrimPrefix(responseText, "```")
+	responseText = strings.TrimSuffix(responseText, "```")
+	responseText = strings.TrimSpace(responseText)
+
+	if err := json.Unmarshal([]byte(responseText), &groupResponse); err != nil {
+		log.Printf("Failed to parse grouping response: %v\nResponse: %s", err, responseText)
+		// Fallback: treat all errors as one group
+		return []ErrorGroup{{
+			Pattern:        "Ungrouped errors",
+			Representative: errors[0],
+			SimilarErrors:  errors[1:],
+			Count:          len(errors),
+		}}, nil
+	}
+
+	// Convert response to ErrorGroups
+	var groups []ErrorGroup
+	for _, g := range groupResponse {
+		if len(g.Indices) == 0 {
+			continue
+		}
+
+		group := ErrorGroup{
+			Pattern: g.Pattern,
+			Count:   len(g.Indices),
+		}
+
+		for i, idx := range g.Indices {
+			if idx < 1 || idx > len(errors) {
+				continue
+			}
+			if i == 0 {
+				group.Representative = errors[idx-1]
+			} else {
+				group.SimilarErrors = append(group.SimilarErrors, errors[idx-1])
+			}
+		}
+		groups = append(groups, group)
+	}
+
+	log.Printf("Grouped %d errors into %d groups\n", len(errors), len(groups))
+	return groups, nil
+}
+
+// AnalyzeErrors uses LLM to analyze an error group with optional trace context.
+func (a *Agent) AnalyzeErrors(ctx context.Context, group ErrorGroup, traceLogs []string) (*ErrorAnalysis, error) {
+	var traceContext string
+	if len(traceLogs) > 0 {
+		traceContext = fmt.Sprintf("\n\nTrace Context (related logs):\n%s", strings.Join(traceLogs, "\n"))
+	}
+
+	prompt := fmt.Sprintf(`You are an expert at diagnosing application errors. Analyze the following error group and provide actionable insights.
+
+Error Pattern: %s
+Error Count: %d
+Representative Error: %s
+%s
+
+Respond with a JSON object containing:
+- "summary": A brief summary of what's happening (1-2 sentences)
+- "possible_causes": An array of 2-4 possible root causes
+- "suggestions": An array of 2-4 actionable suggestions to fix or investigate
+
+Only respond with valid JSON, no other text.`, group.Pattern, group.Count, group.Representative.Message, traceContext)
+
+	result, err := a.generateContent(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run LLM for analysis: %w", err)
+	}
+
+	// Parse the response
+	var analysis struct {
+		Summary        string   `json:"summary"`
+		PossibleCauses []string `json:"possible_causes"`
+		Suggestions    []string `json:"suggestions"`
+	}
+
+	// Clean up response
+	responseText := strings.TrimSpace(result)
+	responseText = strings.TrimPrefix(responseText, "```json")
+	responseText = strings.TrimPrefix(responseText, "```")
+	responseText = strings.TrimSuffix(responseText, "```")
+	responseText = strings.TrimSpace(responseText)
+
+	if err := json.Unmarshal([]byte(responseText), &analysis); err != nil {
+		log.Printf("Failed to parse analysis response: %v\nResponse: %s", err, responseText)
+		// Fallback with basic analysis
+		return &ErrorAnalysis{
+			Summary:        fmt.Sprintf("Error pattern: %s (%d occurrences)", group.Pattern, group.Count),
+			PossibleCauses: []string{"Unable to determine root cause automatically"},
+			Suggestions:    []string{"Review error logs manually", "Check application metrics"},
+		}, nil
+	}
+
+	return &ErrorAnalysis{
+		Summary:        analysis.Summary,
+		PossibleCauses: analysis.PossibleCauses,
+		Suggestions:    analysis.Suggestions,
+	}, nil
+}
