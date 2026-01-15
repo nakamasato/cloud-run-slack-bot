@@ -10,7 +10,7 @@ require (
 	github.com/slack-go/slack v0.17.3
 	github.com/wcharczuk/go-chart/v2 v2.1.2
 	google.golang.org/api v0.260.0
-	google.golang.org/genai v1.41.1
+	google.golang.org/genai v1.42.0
 	google.golang.org/protobuf v1.36.11
 )
 
