@@ -1,8 +1,38 @@
 # Cloud Run Slack Bot
 
-This is a simple Slack bot running on Cloud Run with which you can interact with Cloud Run services and jobs.
+A Slack bot for interacting with Google Cloud Run services and jobs directly from Slack. Monitor multiple GCP projects, get metrics, analyze errors with AI, and receive real-time audit log notifications.
 
 <img src="docs/preview.gif" alt="preview" width="400"/>
+
+## Features
+
+- **Multi-Project Support**: Monitor Cloud Run services and jobs across multiple GCP projects
+- **Interactive Commands**: Describe services, view metrics, and manage resources through Slack
+- **Intelligent Routing**: Automatically detect target projects based on Slack channel configuration
+- **Real-time Notifications**: Receive Cloud Run audit log notifications in designated Slack channels
+- **Metrics Visualization**: Generate PNG charts for service metrics
+- **AI-Powered Debugging**: Analyze error logs using Gemini AI to identify root causes and get actionable suggestions
+
+## Available Commands
+
+Mention the bot in any configured Slack channel to use these commands:
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `@bot describe` | `@bot d` | Show details about a Cloud Run service or job (revision, last modifier, update time, etc.) |
+| `@bot metrics` | `@bot m` | Display request count metrics for a service (with per-revision breakdown) |
+| `@bot set` | `@bot s` | Set the target Cloud Run service or job (shows a list to select from) |
+| `@bot debug` | `@bot dbg` | Analyze recent error logs using AI (requires DEBUG_ENABLED=true) |
+| `@bot help` | `@bot h` | Show available commands |
+
+### Usage Examples
+
+```
+@cloud-run-bot describe
+@cloud-run-bot metrics
+@cloud-run-bot set my-service
+@cloud-run-bot debug
+```
 
 ## Architecture
 
@@ -105,130 +135,38 @@ graph TB
 
 - **Service Layer**: Handles HTTP webhooks and Socket Mode connections from Slack
 - **Multi-Project Handler**: Processes commands and manages user context across multiple GCP projects
-- **Configuration**: Manages multi-project settings and channel routing with automatic backward compatibility
+- **Configuration**: Manages multi-project settings and channel routing
 - **User Memory**: Thread-safe storage for user context and selected resources
 - **Channel-Based Project Detection**: Automatically detects target projects based on Slack channel configuration
 - **GCP Clients**: Abstraction layer for Cloud Run and Monitoring APIs with per-project client management
 - **Chart Generator**: Creates PNG visualizations for metrics data
 - **Audit Log Handler**: Processes real-time Cloud Run audit logs from Pub/Sub with project-specific routing
 
-## Features
+## Quick Start
 
-1. **Multi-Project Support**: Monitor Cloud Run services and jobs across multiple GCP projects with intelligent channel-based project detection
-2. **Interactive Slack Commands**: Interact with Cloud Run resources directly through Slack
-    - Get metrics of Cloud Run services
-    - Describe Cloud Run services and jobs
-    - Set target resources for quick access
-    - Auto-complete and selection for resources
-3. **Real-time Notifications**: Receive notifications for Cloud Run audit logs with project-specific routing
-4. **Metrics Visualization**: Generate PNG charts for Cloud Run service metrics
-5. **Channel-based Project Detection**: Automatically detect target projects based on Slack channel configuration
-6. **AI-Powered Error Analysis (Debug Feature)**: Analyze Cloud Run error logs using Gemini AI to group similar errors, identify root causes, and get actionable suggestions
+For detailed setup instructions, see the [Setup Guide](docs/setup.md).
 
-## Setup
+### Prerequisites
 
-### Cloud Run
+- GCP Project(s) with Cloud Run services/jobs
+- Slack Workspace with admin access
+- Docker or access to the pre-built image: `nakamasato/cloud-run-slack-bot:0.5.1`
 
-#### Roles
+### Basic Setup Steps
 
-1. `roles/run.viewer`: To get information of Cloud Run services
-1. `roles/monitoring.viewer`: To get metrics of Cloud Run services
-1. `roles/logging.viewer`: To read Cloud Logging entries (required for debug feature). Grant this role in each target project when using multi-project configuration.
-1. `roles/aiplatform.user`: To access Vertex AI Gemini API (required for debug feature). Grant this role on the project specified in `GCP_PROJECT_ID`. This role includes the `aiplatform.endpoints.predict` permission.
+1. **Create Slack App** with required OAuth scopes (`app_mentions:read`, `chat:write`, `files:write`)
+2. **Deploy to Cloud Run** with environment variables configured
+3. **Configure Event Subscriptions** in Slack to point to your Cloud Run URL
+4. **Invite the bot** to your Slack channels
 
-#### Environment Variables
+See the complete [Setup Guide](docs/setup.md) for detailed instructions.
 
-##### Multi-Project Configuration (Recommended)
+## Configuration
 
-1. `PROJECTS_CONFIG`: JSON array of project configurations (see [Multi-Project Setup Guide](docs/multi-project-setup.md))
-   ```json
-   [
-     {
-       "id": "project1",
-       "region": "us-central1",
-       "defaultChannel": "project1-alerts",
-       "serviceChannels": {
-         "web-service": "web-team",
-         "api-service": "api-team"
-       }
-     },
-     {
-       "id": "project2",
-       "region": "us-east1",
-       "defaultChannel": "project2-alerts"
-     }
-   ]
-   ```
+The bot is configured using the `PROJECTS_CONFIG` environment variable:
 
-##### Single-Project Configuration (Legacy - Still Supported)
-
-1. `PROJECT`: GCP Project ID to monitor
-1. `REGION`: GCP Region to monitor
-1. `SERVICE_CHANNEL_MAPPING`: Mapping of service names to Slack channel IDs (format: `service1:channel1,service2:channel2`)
-
-##### Common Configuration
-
-1. `SLACK_BOT_TOKEN`: Slack Bot Token
-1. `SLACK_SIGNING_SECRET`: Slack bot signing secret
-1. `SLACK_APP_TOKEN` (optional): Slack oauth token (required for `SLACK_APP_MODE=socket`)
-1. `SLACK_APP_MODE`: Slack App Mode (`http` or `socket`)
-1. `SLACK_CHANNEL`: Default Slack Channel ID to receive notifications (used as fallback for all configurations)
-1. `TMP_DIR` (optional): Temporary directory for storing images (default: `/tmp`)
-
-##### Debug Feature Configuration (Optional)
-
-The debug feature uses Gemini AI via Vertex AI to analyze error logs. To enable:
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DEBUG_ENABLED` | No | `false` | Set to `true` to enable the debug feature |
-| `GCP_PROJECT_ID` | When enabled | - | GCP project ID for Vertex AI API access |
-| `VERTEX_LOCATION` | When enabled | - | GCP region for Vertex AI (e.g., `us-central1`) |
-| `MODEL_NAME` | No | `gemini-2.5-flash-lite` | Gemini model to use for analysis |
-| `DEBUG_TIME_WINDOW` | No | `30` | Time window for error analysis (in minutes) |
-
-**Usage**: `@bot debug` or `@bot dbg` to analyze recent errors for a Cloud Run service or job.
-
-**Required APIs** (must be enabled on the Vertex AI project):
-- Vertex AI API (`aiplatform.googleapis.com`)
-
-> **Note**: When using `PROJECTS_CONFIG`, the bot automatically generates channel-to-project mappings for intelligent project detection. For detailed configuration options, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
-
-#### Deploy
-
-```
-PROJECT=your-project
-REGION=asia-northeast1
-```
-
-#### Initial Setup
-
-```shell
-echo -n "xoxb-xxxx" | gcloud secrets create slack-bot-token --replication-policy automatic --project "$PROJECT" --data-file=-
-echo -n "your-signing-secret" | gcloud secrets create slack-signing-secret --replication-policy automatic --project "$PROJECT" --data-file=-
-gcloud iam service-accounts create cloud-run-slack-bot --project $PROJECT
-# allow app to access the secret
-gcloud secrets add-iam-policy-binding slack-bot-token \
-    --member="serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor" --project ${PROJECT}
-gcloud secrets add-iam-policy-binding slack-signing-secret \
-    --member="serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor" --project ${PROJECT}
-# allow app to get information about Cloud Run services
-gcloud projects add-iam-policy-binding $PROJECT \
-    --member=serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com --role=roles/run.viewer
-# allow app to get metrics of Cloud Run services
-gcloud projects add-iam-policy-binding $PROJECT \
-    --member=serviceAccount:cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com --role=roles/monitoring.viewer
-```
-
-Deploy to Cloud Run
-
-#### Multi-Project Deployment (Recommended)
-
-```bash
-# Create PROJECTS_CONFIG environment variable
-PROJECTS_CONFIG='[
+```json
+[
   {
     "id": "project1",
     "region": "us-central1",
@@ -241,60 +179,32 @@ PROJECTS_CONFIG='[
   {
     "id": "project2",
     "region": "us-east1",
-    "defaultChannel": "project2-alerts",
-    "serviceChannels": {
-      "batch-job": "batch-team"
-    }
+    "defaultChannel": "project2-alerts"
   }
-]'
-
-# Deploy with multi-project configuration
-gcloud run deploy cloud-run-slack-bot \
-    --set-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest" \
-    --set-env-vars "PROJECTS_CONFIG=$PROJECTS_CONFIG,SLACK_APP_MODE=http,TMP_DIR=/tmp,SLACK_CHANNEL=general" \
-    --image nakamasato/cloud-run-slack-bot:0.5.1 \
-    --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
-    --project "$PROJECT" --region "$REGION"
+]
 ```
 
-#### Single-Project Deployment (Legacy)
+### Key Configuration Options
 
-```bash
-# Traditional single-project deployment
-gcloud run deploy cloud-run-slack-bot \
-    --set-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest" \
-    --set-env-vars "PROJECT=$PROJECT,REGION=$REGION,SLACK_APP_MODE=http,TMP_DIR=/tmp,SLACK_CHANNEL=general,SERVICE_CHANNEL_MAPPING=service1:channel1,service2:channel2" \
-    --image nakamasato/cloud-run-slack-bot:0.5.1 \
-    --service-account cloud-run-slack-bot@${PROJECT}.iam.gserviceaccount.com \
-    --project "$PROJECT" --region "$REGION"
-```
+- **id**: GCP Project ID to monitor
+- **region**: GCP Region to monitor
+- **defaultChannel**: Default Slack channel for this project's notifications
+- **serviceChannels**: Map specific services/jobs to dedicated Slack channels
 
-> **Note**: For comprehensive multi-project setup including IAM permissions and Pub/Sub configuration, see the [Multi-Project Setup Guide](docs/multi-project-setup.md).
+For more details, see:
+- [Setup Guide](docs/setup.md)
+- [Multi-Project Setup Guide](docs/multi-project-setup.md)
+- [Terraform Deployment](docs/terraform.md)
 
-### Slack App
+## Documentation
 
-1. Create a new Slack App
-    - [https://api.slack.com/apps](https://api.slack.com/apps)
-1. Add the following scopes:
-    - [app_mentions:read](https://api.slack.com/scopes/app_mentions:read)
-    - [chat:write](https://api.slack.com/scopes/chat:write)
-    - [files:write](https://api.slack.com/scopes/files:write)
-    - [connections:write](https://api.slack.com/scopes/connections:write) (required only when using Socket Mode with `SLACK_APP_MODE=socket`)
-1. Install the app to your workspace
-1. Event Subscriptions
-    - Request URL: `https://your-cloud-run-url/slack/events`
-    - Subscribe to bot events: `app_mention`
-1. Interactivity & Shortcuts
-    - Request URL: `https://your-cloud-run-url/slack/interaction`
+- [Setup Guide](docs/setup.md) - Complete setup instructions
+- [Multi-Project Setup](docs/multi-project-setup.md) - Configure multiple GCP projects
+- [Terraform Deployment](docs/terraform.md) - Infrastructure as Code setup
+- [Auditing Notifications](docs/auditing.md) - Cloud Run audit log integration
+- [Getting Started](docs/getting-started.md) - Quick start tutorial
+- [Development Guide](docs/development.md) - Local development setup
 
-### Slack Channel Settings
+## License
 
-1. Remove preview for console.cloud.google.com
-
-<img src="docs/slack-channel-preview.png" alt="preview" width="400"/>
-
-
-## More
-
-1. [Multi-Project Setup Guide](docs/multi-project-setup.md)
-1. [Auditing Notification](docs/auditing.md)
+See [LICENSE](LICENSE) file for details.
