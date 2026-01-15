@@ -1,14 +1,18 @@
 package visualize
 
 import (
+	"context"
 	"log"
 	"math/rand"
 	"os"
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
 	"github.com/wcharczuk/go-chart/v2"
 	"github.com/wcharczuk/go-chart/v2/drawing"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 var predefinedColorMap = map[string]drawing.Color{
@@ -20,6 +24,14 @@ var predefinedColorMap = map[string]drawing.Color{
 // Visualize draw a line chart and export to a file.
 // Currently only supports hourly data for recent 24 hours.
 func Visualize(title, imgFile string, startTime, endTime time.Time, interval time.Duration, seriesMap *monitoring.TimeSeriesMap) (int64, error) {
+	ctx, span := trace.GetTracer().Start(context.Background(), "visualize.Visualize")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("visualize.title", title),
+		attribute.String("visualize.file", imgFile),
+		attribute.Int("visualize.series_count", len(*seriesMap)),
+	)
 
 	series := []chart.Series{}
 	i := 0
@@ -42,6 +54,8 @@ func Visualize(title, imgFile string, startTime, endTime time.Time, interval tim
 
 	f, err := os.Create(imgFile)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, err
 	}
 	defer func() {
@@ -51,12 +65,19 @@ func Visualize(title, imgFile string, startTime, endTime time.Time, interval tim
 	}()
 	err = graph.Render(chart.PNG, f)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, err
 	}
 	stat, err := f.Stat()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return 0, err
 	}
+
+	span.SetAttributes(attribute.Int64("visualize.file_size", stat.Size()))
+	_ = ctx // suppress unused variable warning
 	return stat.Size(), nil
 }
 

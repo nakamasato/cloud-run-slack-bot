@@ -10,6 +10,9 @@ import (
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/api/iterator"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -82,6 +85,15 @@ func NewMonitoringClient(project string) (*Client, error) {
 }
 
 func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service string, aggregationPeriod time.Duration, startTime, endTime time.Time) (*TimeSeriesMap, error) {
+	ctx, span := trace.GetTracer().Start(ctx, "monitoring.GetCloudRunServiceRequestCount")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("monitoring.project", mc.project),
+		attribute.String("monitoring.service", service),
+		attribute.String("monitoring.aggregation_period", aggregationPeriod.String()),
+	)
+
 	monCon := MonitorCondition{
 		Project: mc.project,
 		Filters: []MonitorFilter{
@@ -108,7 +120,12 @@ func (mc *Client) GetCloudRunServiceRequestCount(ctx context.Context, service st
 		},
 		// PageSize: int32(10000), 100,000 if empty
 	}
-	return mc.GetRequestCountByLabel(ctx, "response_code_class", "metric", req)
+	result, err := mc.GetRequestCountByLabel(ctx, "response_code_class", "metric", req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	return result, err
 }
 
 // labelType: metric or resource
@@ -206,6 +223,15 @@ func (mc *Client) AggregateLatencies(ctx context.Context, req *monitoringpb.List
 }
 
 func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, service string, aggregationPeriod time.Duration, startTime, endTime time.Time) (*TimeSeriesMap, error) {
+	ctx, span := trace.GetTracer().Start(ctx, "monitoring.GetCloudRunServiceRequestLatencies")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("monitoring.project", mc.project),
+		attribute.String("monitoring.service", service),
+		attribute.String("monitoring.aggregation_period", aggregationPeriod.String()),
+	)
+
 	monCon := MonitorCondition{
 		Project: mc.project,
 		Filters: []MonitorFilter{
@@ -238,6 +264,8 @@ func (mc *Client) GetCloudRunServiceRequestLatencies(ctx context.Context, servic
 		}
 		series, err := mc.AggregateLatencies(ctx, req)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 		timeSeriesMap[aligner.String()] = *series

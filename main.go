@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/adk"
@@ -10,9 +11,11 @@ import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrunslackbot"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/debug"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logger"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
 	"github.com/slack-go/slack"
 )
 
@@ -32,6 +35,48 @@ func main() {
 	cfg.LogConfiguration()
 
 	ctx := context.Background()
+
+	// Initialize tracing if PROJECT env var is set (required for Cloud Trace)
+	var traceProvider *trace.Provider
+	projectID := os.Getenv("PROJECT")
+	if projectID == "" && len(cfg.Projects) > 0 {
+		// Fallback to first project ID if PROJECT env var not set
+		projectID = cfg.Projects[0].ID
+	}
+	if projectID != "" {
+		samplingRate := 1.0 // Default to always sample; adjust for production
+		traceProvider, err = trace.NewProvider(ctx, trace.Config{
+			ProjectID:    projectID,
+			ServiceName:  "cloud-run-slack-bot",
+			SamplingRate: samplingRate,
+		})
+		if err != nil {
+			log.Printf("Warning: Failed to initialize tracing: %v", err)
+		} else {
+			log.Println("Tracing initialized successfully")
+			defer func() {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+					log.Printf("Failed to shutdown trace provider: %v", err)
+				}
+			}()
+		}
+	} else {
+		log.Println("Warning: PROJECT environment variable not set, tracing disabled")
+	}
+
+	// Initialize structured logger
+	zapLogger, err := logger.NewLogger(projectID)
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer func() {
+		if err := zapLogger.Sync(); err != nil {
+			log.Printf("Failed to sync logger: %v", err)
+		}
+	}()
+	log.Println("Structured logger initialized successfully")
 
 
 	// Initialize clients for all projects

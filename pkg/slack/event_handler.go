@@ -16,9 +16,12 @@ import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/debug"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/visualize"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const (
@@ -165,8 +168,12 @@ func NewSlackEventHandler(client *slack.Client, rClient *cloudrun.Client, mClien
 
 // NewSlackEventHandler handles AppMention events
 func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error {
-	ctx := context.Background()
+	ctx, span := trace.GetTracer().Start(context.Background(), "HandleEvent")
+	defer span.End()
+
 	innerEvent := event.InnerEvent
+	span.SetAttributes(attribute.String("event.type", innerEvent.Type))
+
 	switch e := innerEvent.Data.(type) {
 	case *slackevents.AppMentionEvent:
 		message := strings.Split(e.Text, " ")
@@ -175,40 +182,63 @@ func (h *SlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error
 			command = message[1] // e.Text is "<@bot_id> command"
 		}
 		log.Printf("command: %s\n", command)
+
+		span.SetAttributes(
+			attribute.String("slack.command", command),
+			attribute.String("slack.user", e.User),
+			attribute.String("slack.channel", e.Channel),
+		)
+
 		currentItem, ok := h.memory.Get(e.User)
 
 		// Check if we're dealing with services or jobs
+		var err error
 		switch command {
 		case "describe", "d":
 			if !ok {
-				return h.list(ctx, e.Channel, ActionIdDescribeResource)
+				err = h.list(ctx, e.Channel, ActionIdDescribeResource)
+			} else {
+				resourceType := h.memory.GetResourceType(e.User)
+				span.SetAttributes(attribute.String("resource.type", resourceType))
+				if resourceType == "job" {
+					err = h.describeJob(ctx, e.Channel, currentItem)
+				} else {
+					err = h.describeService(ctx, e.Channel, currentItem)
+				}
 			}
-			resourceType := h.memory.GetResourceType(e.User)
-			if resourceType == "job" {
-				return h.describeJob(ctx, e.Channel, currentItem)
-			}
-			return h.describeService(ctx, e.Channel, currentItem)
 		case "metrics", "m":
 			if !ok {
-				return h.list(ctx, e.Channel, ActionIdMetricsResource)
+				err = h.list(ctx, e.Channel, ActionIdMetricsResource)
+			} else {
+				resourceType := h.memory.GetResourceType(e.User)
+				span.SetAttributes(attribute.String("resource.type", resourceType))
+				if resourceType == "job" {
+					// Jobs don't have metrics like services, so show description instead
+					err = h.describeJob(ctx, e.Channel, currentItem)
+				} else {
+					err = h.getServiceMetrics(ctx, e.Channel, currentItem, "count", defaultDuration, defaultAggregationPeriod)
+				}
 			}
-			resourceType := h.memory.GetResourceType(e.User)
-			if resourceType == "job" {
-				// Jobs don't have metrics like services, so show description instead
-				return h.describeJob(ctx, e.Channel, currentItem)
-			}
-			return h.getServiceMetrics(ctx, e.Channel, currentItem, "count", defaultDuration, defaultAggregationPeriod)
 		case "set", "s":
-			return h.list(ctx, e.Channel, ActionIdCurrentResource)
+			err = h.list(ctx, e.Channel, ActionIdCurrentResource)
 		case "help", "h":
-			return h.help(ctx, e.Channel, e.User)
+			err = h.help(ctx, e.Channel, e.User)
 		case "sample":
-			return h.sample(ctx, e.Channel)
+			err = h.sample(ctx, e.Channel)
 		default:
-			return h.help(ctx, e.Channel, e.User)
+			err = h.help(ctx, e.Channel, e.User)
 		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		return err
 	}
-	return fmt.Errorf("unsupported event %v", innerEvent.Type)
+	err := fmt.Errorf("unsupported event %v", innerEvent.Type)
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+	return err
 }
 
 // HandleInteraction handles Slack interaction events e.g. selectbox, etc.
@@ -380,6 +410,15 @@ func (h *SlackEventHandler) list(ctx context.Context, channel, actionId string) 
 }
 
 func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, svcName, metricsType string, duration, aggregationPeriod time.Duration) error {
+	ctx, span := trace.GetTracer().Start(ctx, "getServiceMetrics")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("service.name", svcName),
+		attribute.String("metrics.type", metricsType),
+		attribute.String("duration", duration.String()),
+	)
+
 	now := time.Now().UTC()
 	endTime := now.Truncate(aggregationPeriod).Add(aggregationPeriod)
 
@@ -396,6 +435,8 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	}
 
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		_, _, err := h.client.PostMessageContext(ctx, channelId, slack.MsgOptionText("Failed to get request: "+err.Error(), false))
 		return err
 	}
@@ -659,8 +700,12 @@ func NewMultiProjectSlackEventHandler(client *slack.Client, rClients map[string]
 }
 
 func (h *MultiProjectSlackEventHandler) HandleEvent(event *slackevents.EventsAPIEvent) error {
-	ctx := context.Background()
+	ctx, span := trace.GetTracer().Start(context.Background(), "MultiProjectHandleEvent")
+	defer span.End()
+
 	innerEvent := event.InnerEvent
+	span.SetAttributes(attribute.String("event.type", innerEvent.Type))
+
 	switch e := innerEvent.Data.(type) {
 	case *slackevents.AppMentionEvent:
 		message := strings.Split(e.Text, " ")
@@ -669,44 +714,63 @@ func (h *MultiProjectSlackEventHandler) HandleEvent(event *slackevents.EventsAPI
 			command = message[1]
 		}
 		log.Printf("command: %s\n", command)
+
+		span.SetAttributes(
+			attribute.String("slack.command", command),
+			attribute.String("slack.user", e.User),
+			attribute.String("slack.channel", e.Channel),
+		)
+
 		currentItem, ok := h.memory.Get(e.User)
 
 		// Check if we can auto-detect projects from channel
 		channelProjects := h.config.GetProjectsForChannel(e.Channel)
 		log.Printf("Channel %s is associated with projects: %v", e.Channel, channelProjects)
+		span.SetAttributes(attribute.StringSlice("channel.projects", channelProjects))
 
+		var err error
 		switch command {
 		case "describe", "d":
 			if !ok {
-				return h.listResourcesForChannel(ctx, e.Channel, ActionIdDescribeResource, channelProjects)
+				err = h.listResourcesForChannel(ctx, e.Channel, ActionIdDescribeResource, channelProjects)
+			} else {
+				err = h.describeResource(ctx, e.Channel, currentItem)
 			}
-			return h.describeResource(ctx, e.Channel, currentItem)
 		case "metrics", "m":
 			if !ok {
-				return h.listResourcesForChannel(ctx, e.Channel, ActionIdMetricsResource, channelProjects)
+				err = h.listResourcesForChannel(ctx, e.Channel, ActionIdMetricsResource, channelProjects)
+			} else {
+				err = h.getResourceMetrics(ctx, e.Channel, currentItem, "count", defaultDuration, defaultAggregationPeriod)
 			}
-			return h.getResourceMetrics(ctx, e.Channel, currentItem, "count", defaultDuration, defaultAggregationPeriod)
 		case "debug", "dbg":
 			if h.debugger == nil {
-				_, err := h.client.PostEphemeralContext(ctx, e.Channel, e.User,
+				_, err = h.client.PostEphemeralContext(ctx, e.Channel, e.User,
 					slack.MsgOptionText("Debug feature is not enabled. Set DEBUG_ENABLED=true to enable.", false))
-				return err
+			} else if !ok {
+				err = h.listResourcesForChannel(ctx, e.Channel, ActionIdDebugResource, channelProjects)
+			} else {
+				err = h.debugResource(ctx, e.Channel, e.User, currentItem)
 			}
-			if !ok {
-				return h.listResourcesForChannel(ctx, e.Channel, ActionIdDebugResource, channelProjects)
-			}
-			return h.debugResource(ctx, e.Channel, e.User, currentItem)
 		case "set", "s":
-			return h.listResourcesForChannel(ctx, e.Channel, ActionIdCurrentResource, channelProjects)
+			err = h.listResourcesForChannel(ctx, e.Channel, ActionIdCurrentResource, channelProjects)
 		case "help", "h":
-			return h.help(ctx, e.Channel, e.User)
+			err = h.help(ctx, e.Channel, e.User)
 		case "sample":
-			return h.sample(ctx, e.Channel)
+			err = h.sample(ctx, e.Channel)
 		default:
-			return h.help(ctx, e.Channel, e.User)
+			err = h.help(ctx, e.Channel, e.User)
 		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		return err
 	}
-	return fmt.Errorf("unsupported event %v", innerEvent.Type)
+	err := fmt.Errorf("unsupported event %v", innerEvent.Type)
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+	return err
 }
 
 func (h *MultiProjectSlackEventHandler) HandleInteraction(interaction *slack.InteractionCallback) error {

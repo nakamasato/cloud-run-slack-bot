@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	run "google.golang.org/api/run/v2"
 )
 
@@ -112,10 +115,20 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) ListServices(ctx context.Context) ([]string, error) {
+	ctx, span := trace.GetTracer().Start(ctx, "cloudrun.ListServices")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("cloudrun.project", c.project),
+		attribute.String("cloudrun.region", c.region),
+	)
+
 	projLoc := c.getProjectLocation()
 	log.Printf("Listing services in %s\n", projLoc)
 	res, err := c.projectLocationServiceClient.List(projLoc).Context(ctx).Do()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	var services []string
@@ -123,14 +136,25 @@ func (c *Client) ListServices(ctx context.Context) ([]string, error) {
 		svcName := c.GetServiceNameFromFullname(s.Name)
 		services = append(services, svcName)
 	}
+	span.SetAttributes(attribute.Int("cloudrun.services.count", len(services)))
 	return services, nil
 }
 
 func (c *Client) ListJobs(ctx context.Context) ([]string, error) {
+	ctx, span := trace.GetTracer().Start(ctx, "cloudrun.ListJobs")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("cloudrun.project", c.project),
+		attribute.String("cloudrun.region", c.region),
+	)
+
 	projLoc := c.getProjectLocation()
 	log.Printf("Listing jobs in %s\n", projLoc)
 	res, err := c.projectLocationJobClient.List(projLoc).Context(ctx).Do()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	var jobs []string
@@ -138,23 +162,37 @@ func (c *Client) ListJobs(ctx context.Context) ([]string, error) {
 		jobName := c.GetJobNameFromFullname(j.Name)
 		jobs = append(jobs, jobName)
 	}
+	span.SetAttributes(attribute.Int("cloudrun.jobs.count", len(jobs)))
 	return jobs, nil
 }
 
 func (c *Client) GetService(ctx context.Context, serviceName string) (*CloudRunService, error) {
+	ctx, span := trace.GetTracer().Start(ctx, "cloudrun.GetService")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("cloudrun.project", c.project),
+		attribute.String("cloudrun.region", c.region),
+		attribute.String("cloudrun.service.name", serviceName),
+	)
+
 	projLoc := c.getProjectLocation()
 	res, err := c.projectLocationServiceClient.Get(fmt.Sprintf("%s/services/%s", projLoc, serviceName)).Context(ctx).Do()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	fmt.Printf("Service: %+v\n", res)
 
 	updateTime, err := time.Parse(time.RFC3339Nano, res.UpdateTime) // 2024-04-27T00:56:09.929299Z
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	return &CloudRunService{
+	service := &CloudRunService{
 		Name:           c.GetServiceNameFromFullname(res.Name),
 		Region:         c.region,
 		Project:        c.project,
@@ -163,23 +201,43 @@ func (c *Client) GetService(ctx context.Context, serviceName string) (*CloudRunS
 		LastModifier:   res.LastModifier,
 		UpdateTime:     updateTime,
 		LatestRevision: strings.TrimPrefix(res.LatestCreatedRevision, fmt.Sprintf("%s/services/%s/revisions/", projLoc, serviceName)),
-	}, nil
+	}
+
+	span.SetAttributes(
+		attribute.String("cloudrun.service.image", service.Image),
+		attribute.String("cloudrun.service.latest_revision", service.LatestRevision),
+	)
+
+	return service, nil
 }
 
 func (c *Client) GetJob(ctx context.Context, jobName string) (*CloudRunJob, error) {
+	ctx, span := trace.GetTracer().Start(ctx, "cloudrun.GetJob")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("cloudrun.project", c.project),
+		attribute.String("cloudrun.region", c.region),
+		attribute.String("cloudrun.job.name", jobName),
+	)
+
 	projLoc := c.getProjectLocation()
 	res, err := c.projectLocationJobClient.Get(fmt.Sprintf("%s/jobs/%s", projLoc, jobName)).Context(ctx).Do()
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	fmt.Printf("Job: %+v\n", res)
 
 	updateTime, err := time.Parse(time.RFC3339Nano, res.UpdateTime)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	return &CloudRunJob{
+	job := &CloudRunJob{
 		Name:           c.GetJobNameFromFullname(res.Name),
 		Region:         c.region,
 		Project:        c.project,
@@ -187,5 +245,9 @@ func (c *Client) GetJob(ctx context.Context, jobName string) (*CloudRunJob, erro
 		ResourceLimits: res.Template.Template.Containers[0].Resources.Limits,
 		LastModifier:   res.LastModifier,
 		UpdateTime:     updateTime,
-	}, nil
+	}
+
+	span.SetAttributes(attribute.String("cloudrun.job.image", job.Image))
+
+	return job, nil
 }
