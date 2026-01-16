@@ -17,6 +17,7 @@ import (
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
 	"github.com/slack-go/slack"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -92,14 +93,14 @@ func main() {
 		// Create monitoring client for this project
 		mClient, err := monitoring.NewMonitoringClient(project.ID, zapLogger.Logger)
 		if err != nil {
-			log.Fatalf("Failed to create monitoring client for project %s: %v", project.ID, err)
+			zapLogger.Fatal("Failed to create monitoring client for project", zap.String("projectID", project.ID), zap.Error(err))
 		}
 		mClients[project.ID] = mClient
 
 		// Create Cloud Run client for this project
 		rClient, err := cloudrun.NewClient(ctx, project.ID, project.Region, zapLogger.Logger)
 		if err != nil {
-			log.Fatalf("Failed to create Cloud Run client for project %s: %v", project.ID, err)
+			zapLogger.Fatal("Failed to create Cloud Run client for project", zap.String("projectID", project.ID), zap.Error(err))
 		}
 		rClients[project.ID] = rClient
 	}
