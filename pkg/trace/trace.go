@@ -7,6 +7,7 @@ import (
 
 	texporter "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
@@ -93,6 +94,10 @@ func NewProvider(ctx context.Context, cfg Config, logger *zap.Logger) (*Provider
 
 	// Set global TracerProvider
 	otel.SetTracerProvider(tp)
+
+	// Set global propagator for trace context propagation across services
+	// This is CRITICAL: without this, traces won't propagate from upstream HTTP headers
+	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	logger.Info("Trace provider initialized",
 		zap.String("project_id", cfg.ProjectID),
