@@ -11,6 +11,7 @@ import (
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"go.uber.org/zap"
 )
 
 type CloudRunSlackBotHttp struct {
@@ -20,11 +21,11 @@ type CloudRunSlackBotHttp struct {
 	signingSecret string
 }
 
-func NewCloudRunSlackBotHttp(channels map[string]string, defaultChannel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, signingSecret string) *CloudRunSlackBotHttp {
+func NewCloudRunSlackBotHttp(channels map[string]string, defaultChannel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, signingSecret string, logger *zap.Logger) *CloudRunSlackBotHttp {
 	return &CloudRunSlackBotHttp{
 		client:        sClient,
 		slackHandler:  handler,
-		auditHandler:  pubsub.NewCloudRunAuditLogHandler(channels, defaultChannel, sClient),
+		auditHandler:  pubsub.NewCloudRunAuditLogHandler(channels, defaultChannel, sClient, logger),
 		signingSecret: signingSecret,
 	}
 }
@@ -126,11 +127,11 @@ type MultiProjectCloudRunSlackBotHttp struct {
 	signingSecret string
 }
 
-func NewMultiProjectCloudRunSlackBotHttp(cfg *config.Config, sClient *slack.Client, handler *slackinternal.MultiProjectSlackEventHandler) *MultiProjectCloudRunSlackBotHttp {
+func NewMultiProjectCloudRunSlackBotHttp(cfg *config.Config, sClient *slack.Client, handler *slackinternal.MultiProjectSlackEventHandler, logger *zap.Logger) *MultiProjectCloudRunSlackBotHttp {
 	return &MultiProjectCloudRunSlackBotHttp{
 		client:        sClient,
 		slackHandler:  handler,
-		auditHandler:  pubsub.NewMultiProjectCloudRunAuditLogHandler(cfg, sClient),
+		auditHandler:  pubsub.NewMultiProjectCloudRunAuditLogHandler(cfg, sClient, logger),
 		signingSecret: cfg.SlackSigningSecret,
 	}
 }

@@ -13,6 +13,7 @@ import (
 
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
+	"go.uber.org/zap"
 )
 
 func TestSlackEventsVerification(t *testing.T) {
@@ -20,7 +21,8 @@ func TestSlackEventsVerification(t *testing.T) {
 	handler := &slackinternal.SlackEventHandler{}
 	channels := map[string]string{"test-service": "test-channel"}
 	defaultChannel := "default-channel"
-	svc := NewCloudRunSlackBotHttp(channels, defaultChannel, &slack.Client{}, handler, signingSecret)
+	logger := zap.NewNop() // Use no-op logger for tests
+	svc := NewCloudRunSlackBotHttp(channels, defaultChannel, &slack.Client{}, handler, signingSecret, logger)
 
 	tests := []struct {
 		name           string

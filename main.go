@@ -172,6 +172,7 @@ func main() {
 		sClient,
 		cfg,
 		handler,
+		zapLogger.Logger,
 	)
 	svc.Run()
 }

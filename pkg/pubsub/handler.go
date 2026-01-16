@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
 	internalslack "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
+	"go.uber.org/zap"
 )
 
 var boolEmoji = map[bool]string{
@@ -95,37 +95,42 @@ type CloudRunAuditLogHandler struct {
 	client         internalslack.Client
 	channels       map[string]string // Maps service/job names to Slack channel names
 	defaultChannel string            // Default channel for services/jobs not in the mapping
+	logger         *zap.Logger
 }
 
-func NewCloudRunAuditLogHandler(channels map[string]string, defaultChannel string, client internalslack.Client) *CloudRunAuditLogHandler {
+func NewCloudRunAuditLogHandler(channels map[string]string, defaultChannel string, client internalslack.Client, logger *zap.Logger) *CloudRunAuditLogHandler {
 	return &CloudRunAuditLogHandler{
 		client:         client,
 		channels:       channels,
 		defaultChannel: defaultChannel,
+		logger:         logger,
 	}
 }
 
 // HandleCloudRunAuditLogs receives and processes a Pub/Sub push message.
 func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logger := h.logger.With(zap.String("handler", "CloudRunAuditLogHandler"))
+
 	var m PubSubMessage
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("ioutil.ReadAll: %v", err)
+		logger.Error("Failed to read request body", zap.Error(err))
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 	// byte slice unmarshalling handles base64 decoding.
 	if err := json.Unmarshal(body, &m); err != nil {
-		log.Printf("json.Unmarshal: %v", err)
+		logger.Error("Failed to unmarshal PubSub message", zap.Error(err))
 		http.Error(w, "Failed to parse PubSub message", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Cloud Run audit log message.Data: %s\n", string(m.Message.Data))
+	logger.Debug("Received Cloud Run audit log", zap.String("message_data", string(m.Message.Data)))
 
 	var logEntry CloudRunAuditLog
 	if err := json.Unmarshal(m.Message.Data, &logEntry); err != nil {
-		log.Printf("json.Unmarshal: %v", err)
+		logger.Error("Failed to unmarshal log entry", zap.Error(err))
 		http.Error(w, "Failed to parse logEntry", http.StatusBadRequest)
 		return
 	}
@@ -143,7 +148,7 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		jobOrSvcName = serviceName
 		resourceType = "service"
 	} else {
-		log.Printf("Warning: No job or service name found in the log entry")
+		logger.Warn("No job or service name found in the log entry")
 	}
 
 	lastModifier := logEntry.ProtoPayload.Response.Metadata.Annotations.LastModifier
@@ -156,7 +161,11 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 	// Job specific fields
 	latestCreatedExecution := logEntry.ProtoPayload.Response.Status.LatestCreatedExecutionName
 
-	log.Printf("Method Name: %s, Resource Name: %s, Resource Type: %s", methodName, jobOrSvcName, resourceType)
+	logger.Info("Processing Cloud Run audit log",
+		zap.String("method", methodName),
+		zap.String("resource_name", jobOrSvcName),
+		zap.String("resource_type", resourceType),
+	)
 
 	// Get the channel for this service/job, or use the default channel
 	channel, ok := h.channels[jobOrSvcName]
@@ -164,10 +173,17 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		channel = h.defaultChannel
 	}
 	if channel == "" {
-		log.Printf("Warning: No channel found for '%s'(%s)", jobOrSvcName, resourceType)
+		logger.Warn("No channel found for resource",
+			zap.String("resource_name", jobOrSvcName),
+			zap.String("resource_type", resourceType),
+		)
 		return
 	}
-	log.Printf("Set Channel to '%s' for '%s'(%s)", channel, jobOrSvcName, resourceType)
+	logger.Info("Set Slack channel for resource",
+		zap.String("channel", channel),
+		zap.String("resource_name", jobOrSvcName),
+		zap.String("resource_type", resourceType),
+	)
 
 	fields := []slack.AttachmentField{
 		{
@@ -277,45 +293,52 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
-		log.Printf("slack.PostMessage: %v", err)
+		logger.Error("Failed to post Slack message", zap.Error(err))
 		http.Error(w, "Failed to post Slack message", http.StatusInternalServerError)
 		return
 	}
+
+	_ = ctx // Suppress unused variable warning if not using trace context
 }
 
 // MultiProjectCloudRunAuditLogHandler handles audit logs for multiple projects
 type MultiProjectCloudRunAuditLogHandler struct {
 	client internalslack.Client
 	config *config.Config
+	logger *zap.Logger
 }
 
-func NewMultiProjectCloudRunAuditLogHandler(cfg *config.Config, client internalslack.Client) *MultiProjectCloudRunAuditLogHandler {
+func NewMultiProjectCloudRunAuditLogHandler(cfg *config.Config, client internalslack.Client, logger *zap.Logger) *MultiProjectCloudRunAuditLogHandler {
 	return &MultiProjectCloudRunAuditLogHandler{
 		client: client,
 		config: cfg,
+		logger: logger,
 	}
 }
 
 func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logger := h.logger.With(zap.String("handler", "MultiProjectCloudRunAuditLogHandler"))
+
 	var m PubSubMessage
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("ioutil.ReadAll: %v", err)
+		logger.Error("Failed to read request body", zap.Error(err))
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 
 	if err := json.Unmarshal(body, &m); err != nil {
-		log.Printf("json.Unmarshal: %v", err)
+		logger.Error("Failed to unmarshal PubSub message", zap.Error(err))
 		http.Error(w, "Failed to parse PubSub message", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Cloud Run audit log message.Data: %s\n", string(m.Message.Data))
+	logger.Debug("Received Cloud Run audit log", zap.String("message_data", string(m.Message.Data)))
 
 	var logEntry CloudRunAuditLog
 	if err := json.Unmarshal(m.Message.Data, &logEntry); err != nil {
-		log.Printf("json.Unmarshal: %v", err)
+		logger.Error("Failed to unmarshal log entry", zap.Error(err))
 		http.Error(w, "Failed to parse logEntry", http.StatusBadRequest)
 		return
 	}
@@ -323,7 +346,7 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 	methodName := logEntry.ProtoPayload.MethodName
 	projectID := logEntry.Resource.Labels["project_id"]
 	if projectID == "" {
-		log.Printf("Warning: No project_id found in the log entry")
+		logger.Warn("No project_id found in the log entry")
 		return
 	}
 
@@ -338,7 +361,7 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 		jobOrSvcName = serviceName
 		resourceType = "service"
 	} else {
-		log.Printf("Warning: No job or service name found in the log entry")
+		logger.Warn("No job or service name found in the log entry")
 		return
 	}
 
@@ -352,15 +375,29 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 	// Job specific fields
 	latestCreatedExecution := logEntry.ProtoPayload.Response.Status.LatestCreatedExecutionName
 
-	log.Printf("Method Name: %s, Project: %s, Resource Name: %s, Resource Type: %s", methodName, projectID, jobOrSvcName, resourceType)
+	logger.Info("Processing Cloud Run audit log",
+		zap.String("method", methodName),
+		zap.String("project_id", projectID),
+		zap.String("resource_name", jobOrSvcName),
+		zap.String("resource_type", resourceType),
+	)
 
 	// Get the channel for this service/job using the multi-project configuration
 	channel := h.config.GetChannelForService(projectID, jobOrSvcName)
 	if channel == "" {
-		log.Printf("Warning: No channel found for '%s'(%s) in project %s", jobOrSvcName, resourceType, projectID)
+		logger.Warn("No channel found for resource",
+			zap.String("resource_name", jobOrSvcName),
+			zap.String("resource_type", resourceType),
+			zap.String("project_id", projectID),
+		)
 		return
 	}
-	log.Printf("Set Channel to '%s' for '%s'(%s) in project %s", channel, jobOrSvcName, resourceType, projectID)
+	logger.Info("Set Slack channel for resource",
+		zap.String("channel", channel),
+		zap.String("resource_name", jobOrSvcName),
+		zap.String("resource_type", resourceType),
+		zap.String("project_id", projectID),
+	)
 
 	fields := []slack.AttachmentField{
 		{
@@ -478,8 +515,10 @@ func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.Res
 		slack.MsgOptionAttachments(attachment),
 	)
 	if err != nil {
-		log.Printf("slack.PostMessage: %v", err)
+		logger.Error("Failed to post Slack message", zap.Error(err))
 		http.Error(w, "Failed to post Slack message", http.StatusInternalServerError)
 		return
 	}
+
+	_ = ctx // Suppress unused variable warning if not using trace context
 }
