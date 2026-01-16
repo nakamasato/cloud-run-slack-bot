@@ -46,7 +46,7 @@ The application uses Zap for structured logging with special fields for Cloud Lo
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PROJECT` | Yes | GCP project ID for trace correlation |
+| `PROJECT` | Optional | GCP project ID for enabling distributed tracing with Cloud Trace. If not set, tracing is disabled and the application runs without trace instrumentation. Set this when running on GCP to enable observability features. |
 
 ### Initialization
 
