@@ -19,6 +19,8 @@ type Logger struct {
 
 // NewLogger creates a new logger with production configuration.
 // If projectID is empty, it will be read from the GCP_PROJECT_ID environment variable.
+// Log level can be controlled via LOG_LEVEL environment variable (debug, info, warn, error).
+// Defaults to info if not set.
 func NewLogger(projectID string) (*Logger, error) {
 	if projectID == "" {
 		projectID = os.Getenv("GCP_PROJECT_ID")
@@ -30,6 +32,16 @@ func NewLogger(projectID string) (*Logger, error) {
 	config.EncoderConfig.MessageKey = "message"
 	config.EncoderConfig.LevelKey = "severity"
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+
+	// Set log level from environment variable
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel != "" {
+		var level zapcore.Level
+		if err := level.UnmarshalText([]byte(logLevel)); err != nil {
+			return nil, fmt.Errorf("invalid LOG_LEVEL '%s': %w", logLevel, err)
+		}
+		config.Level = zap.NewAtomicLevelAt(level)
+	}
 
 	logger, err := config.Build()
 	if err != nil {

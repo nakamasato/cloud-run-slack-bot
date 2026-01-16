@@ -48,6 +48,7 @@ The application uses Zap for structured logging with special fields for Cloud Lo
 |----------|----------|-------------|
 | `GCP_PROJECT_ID` | Optional | GCP project ID used for all GCP services (Cloud Trace, Cloud Logging, Vertex AI). If not set, falls back to the first project ID in `PROJECTS_CONFIG`. |
 | `TRACING_ENABLED` | Optional | Set to `true` to enable distributed tracing with Cloud Trace. When enabled, requires `GCP_PROJECT_ID` to be set. Default: `false` (tracing disabled). |
+| `LOG_LEVEL` | Optional | Controls the minimum log level for structured logging. Valid values: `debug`, `info`, `warn`, `error`. Default: `info`. Use `debug` for detailed diagnostic information during development or troubleshooting. |
 
 ### Initialization
 
