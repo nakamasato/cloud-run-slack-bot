@@ -11,6 +11,7 @@ import (
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 )
 
@@ -34,9 +35,19 @@ func NewCloudRunSlackBotHttp(channels map[string]string, defaultChannel string, 
 
 // SlackEventsHandler starts http server
 func (svc *CloudRunSlackBotHttp) Run() {
-	http.HandleFunc("/slack/events", svc.SlackEventsHandler())
-	http.HandleFunc("/slack/interaction", svc.SlackInteractionHandler())
-	http.HandleFunc("/cloudrun/events", svc.auditHandler.HandleCloudRunAuditLogs)
+	// Wrap handlers with otelhttp for automatic tracing and context propagation
+	http.Handle("/slack/events", otelhttp.NewHandler(
+		http.HandlerFunc(svc.SlackEventsHandler()),
+		"slack-events",
+	))
+	http.Handle("/slack/interaction", otelhttp.NewHandler(
+		http.HandlerFunc(svc.SlackInteractionHandler()),
+		"slack-interaction",
+	))
+	http.Handle("/cloudrun/events", otelhttp.NewHandler(
+		http.HandlerFunc(svc.auditHandler.HandleCloudRunAuditLogs),
+		"cloudrun-events",
+	))
 	svc.logger.Info("Server listening", zap.Int("port", 8080))
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		svc.logger.Fatal("Server failed to start", zap.Error(err))
@@ -151,9 +162,19 @@ func NewMultiProjectCloudRunSlackBotHttp(cfg *config.Config, sClient *slack.Clie
 }
 
 func (svc *MultiProjectCloudRunSlackBotHttp) Run() {
-	http.HandleFunc("/slack/events", svc.SlackEventsHandler())
-	http.HandleFunc("/slack/interaction", svc.SlackInteractionHandler())
-	http.HandleFunc("/cloudrun/events", svc.auditHandler.HandleCloudRunAuditLogs)
+	// Wrap handlers with otelhttp for automatic tracing and context propagation
+	http.Handle("/slack/events", otelhttp.NewHandler(
+		http.HandlerFunc(svc.SlackEventsHandler()),
+		"slack-events",
+	))
+	http.Handle("/slack/interaction", otelhttp.NewHandler(
+		http.HandlerFunc(svc.SlackInteractionHandler()),
+		"slack-interaction",
+	))
+	http.Handle("/cloudrun/events", otelhttp.NewHandler(
+		http.HandlerFunc(svc.auditHandler.HandleCloudRunAuditLogs),
+		"cloudrun-events",
+	))
 	svc.logger.Info("Server listening", zap.Int("port", 8080))
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		svc.logger.Fatal("Server failed to start", zap.Error(err))
