@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logger"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/pubsub"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
@@ -18,16 +19,16 @@ type CloudRunSlackBotHttp struct {
 	slackHandler  *slackinternal.SlackEventHandler
 	auditHandler  *pubsub.CloudRunAuditLogHandler
 	signingSecret string
-	logger        *zap.Logger
+	logger        *logger.Logger
 }
 
-func NewCloudRunSlackBotHttp(channels map[string]string, defaultChannel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, signingSecret string, logger *zap.Logger) *CloudRunSlackBotHttp {
+func NewCloudRunSlackBotHttp(channels map[string]string, defaultChannel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, signingSecret string, log *logger.Logger) *CloudRunSlackBotHttp {
 	return &CloudRunSlackBotHttp{
 		client:        sClient,
 		slackHandler:  handler,
-		auditHandler:  pubsub.NewCloudRunAuditLogHandler(channels, defaultChannel, sClient, logger),
+		auditHandler:  pubsub.NewCloudRunAuditLogHandler(channels, defaultChannel, sClient, log),
 		signingSecret: signingSecret,
-		logger:        logger,
+		logger:        log,
 	}
 }
 
@@ -46,7 +47,7 @@ func (svc *CloudRunSlackBotHttp) Run() {
 func (svc *CloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		logger := svc.logger.With(zap.String("handler", "SlackEventsHandler"))
+		logger := svc.logger.WithContext(ctx).With(zap.String("handler", "SlackEventsHandler"))
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -110,7 +111,7 @@ func (svc *CloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFunc {
 func (svc *CloudRunSlackBotHttp) SlackInteractionHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		logger := svc.logger.With(zap.String("handler", "SlackInteractionHandler"))
+		logger := svc.logger.WithContext(ctx).With(zap.String("handler", "SlackInteractionHandler"))
 
 		payload := r.FormValue("payload")
 		var interaction slack.InteractionCallback
@@ -136,16 +137,16 @@ type MultiProjectCloudRunSlackBotHttp struct {
 	slackHandler  *slackinternal.MultiProjectSlackEventHandler
 	auditHandler  *pubsub.MultiProjectCloudRunAuditLogHandler
 	signingSecret string
-	logger        *zap.Logger
+	logger        *logger.Logger
 }
 
-func NewMultiProjectCloudRunSlackBotHttp(cfg *config.Config, sClient *slack.Client, handler *slackinternal.MultiProjectSlackEventHandler, logger *zap.Logger) *MultiProjectCloudRunSlackBotHttp {
+func NewMultiProjectCloudRunSlackBotHttp(cfg *config.Config, sClient *slack.Client, handler *slackinternal.MultiProjectSlackEventHandler, log *logger.Logger) *MultiProjectCloudRunSlackBotHttp {
 	return &MultiProjectCloudRunSlackBotHttp{
 		client:        sClient,
 		slackHandler:  handler,
-		auditHandler:  pubsub.NewMultiProjectCloudRunAuditLogHandler(cfg, sClient, logger),
+		auditHandler:  pubsub.NewMultiProjectCloudRunAuditLogHandler(cfg, sClient, log),
 		signingSecret: cfg.SlackSigningSecret,
-		logger:        logger,
+		logger:        log,
 	}
 }
 
@@ -162,7 +163,7 @@ func (svc *MultiProjectCloudRunSlackBotHttp) Run() {
 func (svc *MultiProjectCloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		logger := svc.logger.With(zap.String("handler", "MultiProjectSlackEventsHandler"))
+		logger := svc.logger.WithContext(ctx).With(zap.String("handler", "MultiProjectSlackEventsHandler"))
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -226,7 +227,7 @@ func (svc *MultiProjectCloudRunSlackBotHttp) SlackEventsHandler() http.HandlerFu
 func (svc *MultiProjectCloudRunSlackBotHttp) SlackInteractionHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		logger := svc.logger.With(zap.String("handler", "MultiProjectSlackInteractionHandler"))
+		logger := svc.logger.WithContext(ctx).With(zap.String("handler", "MultiProjectSlackInteractionHandler"))
 
 		payload := r.FormValue("payload")
 		var interaction slack.InteractionCallback

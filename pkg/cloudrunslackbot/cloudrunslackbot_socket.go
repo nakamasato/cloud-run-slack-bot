@@ -2,6 +2,7 @@ package cloudrunslackbot
 
 import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logger"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -13,16 +14,16 @@ type CloudRunSlackBotSocket struct {
 	// https://pkg.go.dev/github.com/slack-go/slack/socketmode#Client
 	sClient *socketmode.Client
 	handler *slackinternal.SlackEventHandler
-	logger  *zap.Logger
+	logger  *logger.Logger
 }
 
-func NewCloudRunSlackBotSocket(channels map[string]string, defaultChannel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, logger *zap.Logger) *CloudRunSlackBotSocket {
+func NewCloudRunSlackBotSocket(channels map[string]string, defaultChannel string, sClient *slack.Client, handler *slackinternal.SlackEventHandler, log *logger.Logger) *CloudRunSlackBotSocket {
 	// https://pkg.go.dev/github.com/slack-go/slack/socketmode#New
 	socketClient := socketmode.New(sClient)
 	return &CloudRunSlackBotSocket{
 		sClient: socketClient,
 		handler: handler,
-		logger:  logger,
+		logger:  log,
 	}
 }
 
@@ -75,15 +76,15 @@ func (svc *CloudRunSlackBotSocket) SlackEventsHandler() {
 type MultiProjectCloudRunSlackBotSocket struct {
 	sClient *socketmode.Client
 	handler *slackinternal.MultiProjectSlackEventHandler
-	logger  *zap.Logger
+	logger  *logger.Logger
 }
 
-func NewMultiProjectCloudRunSlackBotSocket(cfg *config.Config, sClient *slack.Client, handler *slackinternal.MultiProjectSlackEventHandler, logger *zap.Logger) *MultiProjectCloudRunSlackBotSocket {
+func NewMultiProjectCloudRunSlackBotSocket(cfg *config.Config, sClient *slack.Client, handler *slackinternal.MultiProjectSlackEventHandler, log *logger.Logger) *MultiProjectCloudRunSlackBotSocket {
 	socketClient := socketmode.New(sClient)
 	return &MultiProjectCloudRunSlackBotSocket{
 		sClient: socketClient,
 		handler: handler,
-		logger:  logger,
+		logger:  log,
 	}
 }
 

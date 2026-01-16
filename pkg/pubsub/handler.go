@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logger"
 	internalslack "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
 	"github.com/slack-go/slack"
 	"go.uber.org/zap"
@@ -95,22 +96,22 @@ type CloudRunAuditLogHandler struct {
 	client         internalslack.Client
 	channels       map[string]string // Maps service/job names to Slack channel names
 	defaultChannel string            // Default channel for services/jobs not in the mapping
-	logger         *zap.Logger
+	logger         *logger.Logger
 }
 
-func NewCloudRunAuditLogHandler(channels map[string]string, defaultChannel string, client internalslack.Client, logger *zap.Logger) *CloudRunAuditLogHandler {
+func NewCloudRunAuditLogHandler(channels map[string]string, defaultChannel string, client internalslack.Client, log *logger.Logger) *CloudRunAuditLogHandler {
 	return &CloudRunAuditLogHandler{
 		client:         client,
 		channels:       channels,
 		defaultChannel: defaultChannel,
-		logger:         logger,
+		logger:         log,
 	}
 }
 
 // HandleCloudRunAuditLogs receives and processes a Pub/Sub push message.
 func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	logger := h.logger.With(zap.String("handler", "CloudRunAuditLogHandler"))
+	logger := h.logger.WithContext(ctx).With(zap.String("handler", "CloudRunAuditLogHandler"))
 
 	var m PubSubMessage
 	body, err := io.ReadAll(r.Body)
@@ -305,20 +306,20 @@ func (h *CloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter,
 type MultiProjectCloudRunAuditLogHandler struct {
 	client internalslack.Client
 	config *config.Config
-	logger *zap.Logger
+	logger *logger.Logger
 }
 
-func NewMultiProjectCloudRunAuditLogHandler(cfg *config.Config, client internalslack.Client, logger *zap.Logger) *MultiProjectCloudRunAuditLogHandler {
+func NewMultiProjectCloudRunAuditLogHandler(cfg *config.Config, client internalslack.Client, log *logger.Logger) *MultiProjectCloudRunAuditLogHandler {
 	return &MultiProjectCloudRunAuditLogHandler{
 		client: client,
 		config: cfg,
-		logger: logger,
+		logger: log,
 	}
 }
 
 func (h *MultiProjectCloudRunAuditLogHandler) HandleCloudRunAuditLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	logger := h.logger.With(zap.String("handler", "MultiProjectCloudRunAuditLogHandler"))
+	logger := h.logger.WithContext(ctx).With(zap.String("handler", "MultiProjectCloudRunAuditLogHandler"))
 
 	var m PubSubMessage
 	body, err := io.ReadAll(r.Body)
