@@ -21,6 +21,7 @@ func TestNewProvider_WithConfig(t *testing.T) {
 		ProjectID:    "test-project",
 		ServiceName:  "test-service",
 		SamplingRate: 0.5,
+		TestMode:     true, // Skip exporter creation in tests
 	}
 
 	provider, err := NewProvider(ctx, cfg)
@@ -43,6 +44,7 @@ func TestGetTracer(t *testing.T) {
 	ctx := context.Background()
 	cfg := Config{
 		ProjectID: "test-project",
+		TestMode:  true, // Skip exporter creation in tests
 	}
 
 	provider, err := NewProvider(ctx, cfg)
@@ -71,6 +73,7 @@ func TestGetTracerWithName(t *testing.T) {
 	ctx := context.Background()
 	cfg := Config{
 		ProjectID: "test-project",
+		TestMode:  true, // Skip exporter creation in tests
 	}
 
 	provider, err := NewProvider(ctx, cfg)
@@ -99,6 +102,7 @@ func TestSpanErrorRecording(t *testing.T) {
 	ctx := context.Background()
 	cfg := Config{
 		ProjectID: "test-project",
+		TestMode:  true, // Skip exporter creation in tests
 	}
 
 	provider, err := NewProvider(ctx, cfg)

@@ -2,7 +2,6 @@ package visualize
 
 import (
 	"context"
-	"log"
 	"math/rand"
 	"os"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/wcharczuk/go-chart/v2/drawing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 )
 
 var predefinedColorMap = map[string]drawing.Color{
@@ -23,7 +23,7 @@ var predefinedColorMap = map[string]drawing.Color{
 
 // Visualize draw a line chart and export to a file.
 // Currently only supports hourly data for recent 24 hours.
-func Visualize(title, imgFile string, startTime, endTime time.Time, interval time.Duration, seriesMap *monitoring.TimeSeriesMap) (int64, error) {
+func Visualize(title, imgFile string, startTime, endTime time.Time, interval time.Duration, seriesMap *monitoring.TimeSeriesMap, logger *zap.Logger) (int64, error) {
 	ctx, span := trace.GetTracer().Start(context.Background(), "visualize.Visualize")
 	defer span.End()
 
@@ -36,7 +36,7 @@ func Visualize(title, imgFile string, startTime, endTime time.Time, interval tim
 	series := []chart.Series{}
 	i := 0
 	for name, ts := range *seriesMap {
-		series = append(series, makeChartTimeSeries(i, name, startTime, endTime, interval, &ts))
+		series = append(series, makeChartTimeSeries(i, name, startTime, endTime, interval, &ts, logger))
 		i++
 	}
 	// ticks := []chart.Tick{}
@@ -60,7 +60,7 @@ func Visualize(title, imgFile string, startTime, endTime time.Time, interval tim
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			logger.Warn("Failed to close file", zap.Error(err))
 		}
 	}()
 	err = graph.Render(chart.PNG, f)
@@ -81,7 +81,7 @@ func Visualize(title, imgFile string, startTime, endTime time.Time, interval tim
 	return stat.Size(), nil
 }
 
-func makeChartTimeSeries(i int, name string, startTime, endTime time.Time, interval time.Duration, timeSeries *monitoring.TimeSeries) *chart.TimeSeries {
+func makeChartTimeSeries(i int, name string, startTime, endTime time.Time, interval time.Duration, timeSeries *monitoring.TimeSeries, logger *zap.Logger) *chart.TimeSeries {
 	color, ok := predefinedColorMap[name]
 	if !ok {
 		color = chart.GetDefaultColor(i)
@@ -101,11 +101,11 @@ func makeChartTimeSeries(i int, name string, startTime, endTime time.Time, inter
 		cTs.XValues = append(cTs.XValues, t)
 		cTs.YValues = append(cTs.YValues, counter[t])
 	}
-	log.Printf("name: %s\nXValues:%d, YValues:%d", name, len(cTs.XValues), len(cTs.YValues))
+	logger.Debug("Created chart time series", zap.String("name", name), zap.Int("x_values_count", len(cTs.XValues)), zap.Int("y_values_count", len(cTs.YValues)))
 	return &cTs
 }
 
-func VisualizeSample(imgFile string) error {
+func VisualizeSample(imgFile string, logger *zap.Logger) error {
 	durationInMin := 24 * 60
 	intervalInMin := 5
 
@@ -143,7 +143,7 @@ func VisualizeSample(imgFile string) error {
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.Printf("Failed to close file: %v", err)
+			logger.Warn("Failed to close file", zap.Error(err))
 		}
 	}()
 	return graph.Render(chart.PNG, f)

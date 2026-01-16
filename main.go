@@ -85,14 +85,14 @@ func main() {
 
 	for _, project := range cfg.Projects {
 		// Create monitoring client for this project
-		mClient, err := monitoring.NewMonitoringClient(project.ID)
+		mClient, err := monitoring.NewMonitoringClient(project.ID, zapLogger.Logger)
 		if err != nil {
 			log.Fatalf("Failed to create monitoring client for project %s: %v", project.ID, err)
 		}
 		mClients[project.ID] = mClient
 
 		// Create Cloud Run client for this project
-		rClient, err := cloudrun.NewClient(ctx, project.ID, project.Region)
+		rClient, err := cloudrun.NewClient(ctx, project.ID, project.Region, zapLogger.Logger)
 		if err != nil {
 			log.Fatalf("Failed to create Cloud Run client for project %s: %v", project.ID, err)
 		}
@@ -159,7 +159,7 @@ func main() {
 	sClient := slack.New(cfg.SlackBotToken, ops...)
 
 	// Create multi-project handler
-	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, debugger, cfg.TmpDir, cfg)
+	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, debugger, cfg.TmpDir, cfg, zapLogger.Logger)
 
 	// Create service with multi-project support
 	svc := cloudrunslackbot.NewMultiProjectCloudRunSlackBotService(

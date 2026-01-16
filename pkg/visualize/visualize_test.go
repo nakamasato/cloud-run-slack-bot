@@ -7,6 +7,7 @@ import (
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	"github.com/wcharczuk/go-chart/v2"
+	"go.uber.org/zap"
 )
 
 func TestMakeChartTimeSeries(t *testing.T) {
@@ -47,7 +48,8 @@ func TestMakeChartTimeSeries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := makeChartTimeSeries(0, tt.name, tt.startTime, tt.endTime, tt.interval, tt.timeSeries); !reflect.DeepEqual(got, tt.want) {
+			logger := zap.NewNop() // Use no-op logger for tests
+			if got := makeChartTimeSeries(0, tt.name, tt.startTime, tt.endTime, tt.interval, tt.timeSeries, logger); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("XValues = %v, want %v", got, tt.want)
 			}
 		})

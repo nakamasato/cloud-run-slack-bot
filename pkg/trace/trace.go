@@ -25,6 +25,9 @@ type Config struct {
 	// SamplingRate is the probability of sampling a trace (0.0 to 1.0).
 	// Use 1.0 for always sampling (default), or lower values for production.
 	SamplingRate float64
+	// TestMode skips creating the real Cloud Trace exporter.
+	// Used in tests to avoid requiring GCP credentials.
+	TestMode bool
 }
 
 // Provider wraps the OpenTelemetry TracerProvider.
@@ -44,12 +47,6 @@ func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 
 	if cfg.SamplingRate == 0 {
 		cfg.SamplingRate = 1.0 // Default to always sampling
-	}
-
-	// Create Google Cloud Trace exporter
-	exporter, err := texporter.New(texporter.WithProjectID(cfg.ProjectID))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
 
 	// Create resource with service information
@@ -76,12 +73,23 @@ func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 		)
 	}
 
+	// Create TracerProvider options
+	var tpOptions []sdktrace.TracerProviderOption
+	tpOptions = append(tpOptions, sdktrace.WithResource(res))
+	tpOptions = append(tpOptions, sdktrace.WithSampler(sampler))
+
+	// Only create exporter in production mode
+	if !cfg.TestMode {
+		// Create Google Cloud Trace exporter
+		exporter, err := texporter.New(texporter.WithProjectID(cfg.ProjectID))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create trace exporter: %w", err)
+		}
+		tpOptions = append(tpOptions, sdktrace.WithBatcher(exporter))
+	}
+
 	// Create TracerProvider
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sampler),
-	)
+	tp := sdktrace.NewTracerProvider(tpOptions...)
 
 	// Set global TracerProvider
 	otel.SetTracerProvider(tp)

@@ -59,11 +59,27 @@ traceProvider, err := trace.NewProvider(ctx, trace.Config{
     ServiceName:  "cloud-run-slack-bot",
     SamplingRate: 1.0, // Adjust for production
 })
-defer traceProvider.Shutdown(ctx)
+if err != nil {
+    log.Fatalf("Failed to initialize tracing: %v", err)
+}
+defer func() {
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+        log.Printf("Failed to shutdown trace provider: %v", err)
+    }
+}()
 
 // Initialize structured logger
 zapLogger, err := logger.NewLogger(projectID)
-defer zapLogger.Sync()
+if err != nil {
+    log.Fatalf("Failed to initialize logger: %v", err)
+}
+defer func() {
+    if err := zapLogger.Sync(); err != nil {
+        log.Printf("Failed to sync logger: %v", err)
+    }
+}()
 ```
 
 ## Usage
