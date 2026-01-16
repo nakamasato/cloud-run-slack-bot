@@ -18,10 +18,10 @@ type Logger struct {
 }
 
 // NewLogger creates a new logger with production configuration.
-// If projectID is empty, it will be read from the PROJECT environment variable.
+// If projectID is empty, it will be read from the GCP_PROJECT_ID environment variable.
 func NewLogger(projectID string) (*Logger, error) {
 	if projectID == "" {
-		projectID = os.Getenv("PROJECT")
+		projectID = os.Getenv("GCP_PROJECT_ID")
 	}
 
 	config := zap.NewProductionConfig()
@@ -45,7 +45,7 @@ func NewLogger(projectID string) (*Logger, error) {
 // NewDevelopmentLogger creates a new logger with development configuration.
 func NewDevelopmentLogger(projectID string) (*Logger, error) {
 	if projectID == "" {
-		projectID = os.Getenv("PROJECT")
+		projectID = os.Getenv("GCP_PROJECT_ID")
 	}
 
 	config := zap.NewDevelopmentConfig()

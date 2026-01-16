@@ -46,29 +46,42 @@ The application uses Zap for structured logging with special fields for Cloud Lo
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PROJECT` | Optional | GCP project ID for enabling distributed tracing with Cloud Trace. If not set, tracing is disabled and the application runs without trace instrumentation. Set this when running on GCP to enable observability features. |
+| `GCP_PROJECT_ID` | Optional | GCP project ID used for all GCP services (Cloud Trace, Cloud Logging, Vertex AI). If not set, falls back to the first project ID in `PROJECTS_CONFIG`. |
+| `TRACING_ENABLED` | Optional | Set to `true` to enable distributed tracing with Cloud Trace. When enabled, requires `GCP_PROJECT_ID` to be set. Default: `false` (tracing disabled). |
 
 ### Initialization
 
 Tracing and logging are initialized in `main.go`:
 
 ```go
-// Initialize tracing
-traceProvider, err := trace.NewProvider(ctx, trace.Config{
-    ProjectID:    projectID,
-    ServiceName:  "cloud-run-slack-bot",
-    SamplingRate: 1.0, // Adjust for production
-})
-if err != nil {
-    log.Fatalf("Failed to initialize tracing: %v", err)
+// Get GCP project ID
+projectID := os.Getenv("GCP_PROJECT_ID")
+if projectID == "" && len(cfg.Projects) > 0 {
+    // Fallback to first project ID if GCP_PROJECT_ID not set
+    projectID = cfg.Projects[0].ID
 }
-defer func() {
-    shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    if err := traceProvider.Shutdown(shutdownCtx); err != nil {
-        log.Printf("Failed to shutdown trace provider: %v", err)
+
+// Initialize tracing if TRACING_ENABLED is set
+var traceProvider *trace.Provider
+tracingEnabled := os.Getenv("TRACING_ENABLED") == "true"
+if tracingEnabled && projectID != "" {
+    traceProvider, err := trace.NewProvider(ctx, trace.Config{
+        ProjectID:    projectID,
+        ServiceName:  "cloud-run-slack-bot",
+        SamplingRate: 1.0, // Adjust for production
+    })
+    if err != nil {
+        log.Printf("Warning: Failed to initialize tracing: %v", err)
+    } else {
+        defer func() {
+            shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+            defer cancel()
+            if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+                log.Printf("Failed to shutdown trace provider: %v", err)
+            }
+        }()
     }
-}()
+}
 
 // Initialize structured logger
 zapLogger, err := logger.NewLogger(projectID)
@@ -192,14 +205,15 @@ trace="projects/[PROJECT_ID]/traces/[TRACE_ID]"
 
 ### Traces not appearing in Cloud Trace
 
-1. Verify `PROJECT` environment variable is set correctly
-2. Check service account has `roles/cloudtrace.agent` permission
-3. Review application logs for trace exporter errors
-4. Ensure sampling rate is not too low (check `SamplingRate` in configuration)
+1. Verify `TRACING_ENABLED=true` is set
+2. Verify `GCP_PROJECT_ID` environment variable is set correctly
+3. Check service account has `roles/cloudtrace.agent` permission
+4. Review application logs for trace exporter errors
+5. Ensure sampling rate is not too low (check `SamplingRate` in configuration)
 
 ### Logs not correlated with traces
 
-1. Verify logger is initialized with correct project ID
+1. Verify `GCP_PROJECT_ID` is set and logger is initialized with correct project ID
 2. Ensure `logger.WithContext(ctx)` is called with a context containing trace information
 3. Check that OpenTelemetry tracer is properly initialized before creating spans
 4. Verify log entries contain `logging.googleapis.com/trace` field

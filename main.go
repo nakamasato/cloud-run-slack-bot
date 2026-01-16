@@ -36,14 +36,17 @@ func main() {
 
 	ctx := context.Background()
 
-	// Initialize tracing if PROJECT env var is set (required for Cloud Trace)
-	var traceProvider *trace.Provider
-	projectID := os.Getenv("PROJECT")
+	// Get GCP project ID for Cloud Trace and other GCP services
+	projectID := os.Getenv("GCP_PROJECT_ID")
 	if projectID == "" && len(cfg.Projects) > 0 {
-		// Fallback to first project ID if PROJECT env var not set
+		// Fallback to first project ID if GCP_PROJECT_ID env var not set
 		projectID = cfg.Projects[0].ID
 	}
-	if projectID != "" {
+
+	// Initialize tracing if TRACING_ENABLED is set
+	var traceProvider *trace.Provider
+	tracingEnabled := os.Getenv("TRACING_ENABLED") == "true"
+	if tracingEnabled && projectID != "" {
 		samplingRate := 1.0 // Default to always sample; adjust for production
 		traceProvider, err = trace.NewProvider(ctx, trace.Config{
 			ProjectID:    projectID,
@@ -62,8 +65,10 @@ func main() {
 				}
 			}()
 		}
+	} else if !tracingEnabled {
+		log.Println("Tracing disabled (TRACING_ENABLED not set to true)")
 	} else {
-		log.Println("Warning: PROJECT environment variable not set, tracing disabled")
+		log.Println("Warning: GCP_PROJECT_ID not set, tracing disabled")
 	}
 
 	// Initialize structured logger
