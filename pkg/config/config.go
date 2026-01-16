@@ -3,9 +3,10 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
+
+	"go.uber.org/zap"
 )
 
 // ProjectConfig represents configuration for a single GCP project
@@ -214,32 +215,38 @@ func (c *Config) GetProjectConfig(projectID string) (*ProjectConfig, bool) {
 }
 
 // LogConfiguration logs the current configuration (without sensitive data)
-func (c *Config) LogConfiguration() {
-	log.Printf("Configuration loaded:")
-	log.Printf("  Default Channel: %s", c.DefaultChannel)
-	log.Printf("  Slack App Mode: %s", c.SlackAppMode)
-	log.Printf("  Projects:")
+func (c *Config) LogConfiguration(logger *zap.Logger) {
+	logger.Info("Configuration loaded")
+	logger.Info("Default Channel", zap.String("channel", c.DefaultChannel))
+	logger.Info("Slack App Mode", zap.String("mode", c.SlackAppMode))
+	logger.Info("Projects configured", zap.Int("count", len(c.Projects)))
 	for _, project := range c.Projects {
-		log.Printf("    - ID: %s, Region: %s, Default Channel: %s",
-			project.ID, project.Region, project.DefaultChannel)
+		logger.Info("Project configuration",
+			zap.String("project_id", project.ID),
+			zap.String("region", project.Region),
+			zap.String("default_channel", project.DefaultChannel))
 		if len(project.ServiceChannels) > 0 {
-			log.Printf("      Service Channels: %v", project.ServiceChannels)
+			logger.Info("Service channels", zap.String("project_id", project.ID), zap.Any("channels", project.ServiceChannels))
 		}
 	}
-	log.Printf("  Channel-to-Project Mapping:")
+	logger.Info("Channel-to-Project Mapping", zap.Int("channels", len(c.ChannelToProjects)))
 	for channel, projects := range c.ChannelToProjects {
 		if len(projects) == 1 {
-			log.Printf("    - Channel '%s' -> Project '%s' (auto-detect enabled)", channel, projects[0])
+			logger.Info("Channel mapping (auto-detect enabled)",
+				zap.String("channel", channel),
+				zap.String("project", projects[0]))
 		} else {
-			log.Printf("    - Channel '%s' -> Projects %v (manual selection required)", channel, projects)
+			logger.Info("Channel mapping (manual selection required)",
+				zap.String("channel", channel),
+				zap.Strings("projects", projects))
 		}
 	}
-	log.Printf("  Debug Feature:")
-	log.Printf("    - Enabled: %v", c.DebugEnabled)
+	logger.Info("Debug feature configuration", zap.Bool("enabled", c.DebugEnabled))
 	if c.DebugEnabled {
-		log.Printf("    - GCP Project ID: %s", c.GCPProjectID)
-		log.Printf("    - Vertex Location: %s", c.VertexLocation)
-		log.Printf("    - Model: %s", c.ModelName)
-		log.Printf("    - Time Window: %d minutes", c.DebugTimeWindow)
+		logger.Info("Debug feature details",
+			zap.String("gcp_project_id", c.GCPProjectID),
+			zap.String("vertex_location", c.VertexLocation),
+			zap.String("model", c.ModelName),
+			zap.Int("time_window_minutes", c.DebugTimeWindow))
 	}
 }

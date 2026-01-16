@@ -3,11 +3,11 @@ package debug
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/adk"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
+	"go.uber.org/zap"
 )
 
 const maxTraceLogsForAnalysis = 20 // Limit trace logs to prevent overwhelming LLM
@@ -17,14 +17,16 @@ type Debugger struct {
 	lClients map[string]*logging.Client
 	agent    *adk.DebugAgent
 	config   Config
+	logger   *zap.Logger
 }
 
 // NewDebugger creates a new debugger.
-func NewDebugger(lClients map[string]*logging.Client, agent *adk.DebugAgent, cfg Config) *Debugger {
+func NewDebugger(lClients map[string]*logging.Client, agent *adk.DebugAgent, cfg Config, logger *zap.Logger) *Debugger {
 	return &Debugger{
 		lClients: lClients,
 		agent:    agent,
 		config:   cfg,
+		logger:   logger,
 	}
 }
 
@@ -36,8 +38,11 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 		return nil, fmt.Errorf("no logging client found for project %s", projectID)
 	}
 
-	log.Printf("Starting debug analysis for %s %s in project %s (lookback: %v)\n",
-		resourceType, resourceName, projectID, d.config.LookbackDuration)
+	d.logger.Info("Starting debug analysis",
+		zap.String("resource_type", resourceType),
+		zap.String("resource_name", resourceName),
+		zap.String("project_id", projectID),
+		zap.Duration("lookback", d.config.LookbackDuration))
 
 	// Step 1: Get error logs
 	errorLogs, err := lClient.GetErrorLogs(ctx, resourceType, resourceName, d.config.LookbackDuration)
@@ -55,7 +60,9 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 	}
 
 	if len(errorLogs) == 0 {
-		log.Printf("No errors found for %s %s\n", resourceType, resourceName)
+		d.logger.Info("No errors found",
+			zap.String("resource_type", resourceType),
+			zap.String("resource_name", resourceName))
 		return result, nil
 	}
 
@@ -90,7 +97,9 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 		if group.Representative.TraceID != "" {
 			traceEntries, err := lClient.GetLogsByTraceID(ctx, group.Representative.TraceID)
 			if err != nil {
-				log.Printf("Warning: failed to get trace logs for %s: %v\n", group.Representative.TraceID, err)
+				d.logger.Warn("Failed to get trace logs",
+					zap.String("trace_id", group.Representative.TraceID),
+					zap.Error(err))
 			} else {
 				for i, entry := range traceEntries {
 					if i >= maxTraceLogsForAnalysis {
@@ -107,7 +116,9 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 		// Analyze the error group
 		analysis, err := d.agent.AnalyzeErrors(ctx, group, traceLogs)
 		if err != nil {
-			log.Printf("Warning: failed to analyze error group %s: %v\n", group.Pattern, err)
+			d.logger.Warn("Failed to analyze error group",
+				zap.String("pattern", group.Pattern),
+				zap.Error(err))
 			groupResult.Analysis = adk.ErrorAnalysis{
 				Summary:        fmt.Sprintf("Analysis unavailable for: %s", group.Pattern),
 				PossibleCauses: []string{"Analysis failed"},
@@ -120,6 +131,8 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 		result.ErrorGroups = append(result.ErrorGroups, groupResult)
 	}
 
-	log.Printf("Debug analysis complete: %d errors in %d groups\n", result.TotalErrors, len(result.ErrorGroups))
+	d.logger.Info("Debug analysis complete",
+		zap.Int("total_errors", result.TotalErrors),
+		zap.Int("group_count", len(result.ErrorGroups)))
 	return result, nil
 }

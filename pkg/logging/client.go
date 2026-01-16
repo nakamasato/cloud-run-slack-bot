@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/logging/logadmin"
+	"go.uber.org/zap"
 	"google.golang.org/api/iterator"
 )
 
@@ -34,16 +34,17 @@ type ResourceInfo struct {
 type Client struct {
 	project string
 	client  *logadmin.Client
+	logger  *zap.Logger
 }
 
 // NewLoggingClient creates a new logging client for a project.
-func NewLoggingClient(ctx context.Context, project string) (*Client, error) {
+func NewLoggingClient(ctx context.Context, project string, logger *zap.Logger) (*Client, error) {
 	client, err := logadmin.NewClient(ctx, project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logadmin client: %w", err)
 	}
-	log.Printf("Logging client created for project %s\n", project)
-	return &Client{project: project, client: client}, nil
+	logger.Info("Logging client created", zap.String("project", project))
+	return &Client{project: project, client: client, logger: logger}, nil
 }
 
 // GetErrorLogs retrieves error logs for a Cloud Run service or job.
@@ -68,7 +69,9 @@ func (c *Client) GetErrorLogs(ctx context.Context, resourceType, resourceName st
 		return nil, fmt.Errorf("unsupported resource type: %s", resourceType)
 	}
 
-	log.Printf("[%s] Getting error logs with filter: %s\n", c.project, filter)
+	c.logger.Info("Getting error logs",
+		zap.String("project", c.project),
+		zap.String("filter", filter))
 
 	return c.queryLogs(ctx, filter)
 }
@@ -77,7 +80,9 @@ func (c *Client) GetErrorLogs(ctx context.Context, resourceType, resourceName st
 func (c *Client) GetLogsByTraceID(ctx context.Context, traceID string) ([]LogEntry, error) {
 	// Cloud Run trace format: projects/{project}/traces/{trace_id}
 	filter := fmt.Sprintf(`trace = "projects/%s/traces/%s"`, c.project, traceID)
-	log.Printf("[%s] Getting logs by trace ID: %s\n", c.project, traceID)
+	c.logger.Info("Getting logs by trace ID",
+		zap.String("project", c.project),
+		zap.String("trace_id", traceID))
 	return c.queryLogs(ctx, filter)
 }
 
@@ -145,7 +150,9 @@ func (c *Client) queryLogs(ctx context.Context, filter string) ([]LogEntry, erro
 		entries = append(entries, logEntry)
 	}
 
-	log.Printf("[%s] Retrieved %d log entries\n", c.project, len(entries))
+	c.logger.Info("Retrieved log entries",
+		zap.String("project", c.project),
+		zap.Int("count", len(entries)))
 	return entries, nil
 }
 

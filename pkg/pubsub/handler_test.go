@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logger"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
+	"go.uber.org/zap"
 )
 
 func TestCloudRunAuditLogHandler(t *testing.T) {
@@ -134,6 +136,7 @@ func TestCloudRunAuditLogHandler(t *testing.T) {
 				client:         &dummy,
 				channels:       tt.channels,
 				defaultChannel: tt.defaultChannel,
+				logger:         &logger.Logger{Logger: zap.NewNop()}, // Use no-op logger for tests
 			}
 			handler := http.HandlerFunc(auditHandler.HandleCloudRunAuditLogs)
 

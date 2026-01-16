@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/adk"
@@ -10,10 +11,13 @@ import (
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/cloudrunslackbot"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/config"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/debug"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/logger"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/logging"
 	"github.com/nakamasato/cloud-run-slack-bot/pkg/monitoring"
 	slackinternal "github.com/nakamasato/cloud-run-slack-bot/pkg/slack"
+	"github.com/nakamasato/cloud-run-slack-bot/pkg/trace"
 	"github.com/slack-go/slack"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -28,11 +32,57 @@ func main() {
 		log.Fatalf("Configuration validation failed: %v", err)
 	}
 
-	// Log configuration
-	cfg.LogConfiguration()
-
 	ctx := context.Background()
 
+	// Get GCP project ID for Cloud Trace and other GCP services
+	projectID := os.Getenv("GCP_PROJECT_ID")
+	if projectID == "" && len(cfg.Projects) > 0 {
+		// Fallback to first project ID if GCP_PROJECT_ID env var not set
+		projectID = cfg.Projects[0].ID
+	}
+
+	// Initialize structured logger
+	zapLogger, err := logger.NewLogger(projectID)
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer func() {
+		if err := zapLogger.Sync(); err != nil {
+			zapLogger.Error("Failed to sync logger", zap.Error(err))
+		}
+	}()
+	zapLogger.Info("Structured logger initialized successfully")
+
+	// Log configuration
+	cfg.LogConfiguration(zapLogger.Logger)
+
+	// Initialize tracing if TRACING_ENABLED is set
+	var traceProvider *trace.Provider
+	tracingEnabled := os.Getenv("TRACING_ENABLED") == "true"
+	if tracingEnabled && projectID != "" {
+		samplingRate := 1.0 // Default to always sample; adjust for production
+		traceProvider, err = trace.NewProvider(ctx, trace.Config{
+			ProjectID:    projectID,
+			ServiceName:  "cloud-run-slack-bot",
+			SamplingRate: samplingRate,
+		}, zapLogger.Logger)
+		if err != nil {
+			zapLogger.Warn("Failed to initialize tracing", zap.Error(err))
+		} else {
+			zapLogger.Info("Tracing initialized successfully")
+			defer func() {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+					zapLogger.Error("Failed to shutdown trace provider", zap.Error(err))
+				}
+			}()
+		}
+	} else if !tracingEnabled {
+		zapLogger.Info("Tracing disabled (TRACING_ENABLED not set to true)")
+	} else {
+		zapLogger.Warn("GCP_PROJECT_ID not set, tracing disabled")
+	}
 
 	// Initialize clients for all projects
 	rClients := make(map[string]*cloudrun.Client)
@@ -40,16 +90,16 @@ func main() {
 
 	for _, project := range cfg.Projects {
 		// Create monitoring client for this project
-		mClient, err := monitoring.NewMonitoringClient(project.ID)
+		mClient, err := monitoring.NewMonitoringClient(project.ID, zapLogger.Logger)
 		if err != nil {
-			log.Fatalf("Failed to create monitoring client for project %s: %v", project.ID, err)
+			zapLogger.Fatal("Failed to create monitoring client for project", zap.String("projectID", project.ID), zap.Error(err))
 		}
 		mClients[project.ID] = mClient
 
 		// Create Cloud Run client for this project
-		rClient, err := cloudrun.NewClient(ctx, project.ID, project.Region)
+		rClient, err := cloudrun.NewClient(ctx, project.ID, project.Region, zapLogger.Logger)
 		if err != nil {
-			log.Fatalf("Failed to create Cloud Run client for project %s: %v", project.ID, err)
+			zapLogger.Fatal("Failed to create Cloud Run client for project", zap.String("projectID", project.ID), zap.Error(err))
 		}
 		rClients[project.ID] = rClient
 	}
@@ -59,14 +109,14 @@ func main() {
 	var debugger *debug.Debugger
 
 	if cfg.DebugEnabled {
-		log.Println("Debug feature enabled, initializing logging clients and ADK agent...")
+		zapLogger.Info("Debug feature enabled, initializing logging clients and ADK agent")
 
 		// Initialize logging clients per project
 		lClients = make(map[string]*logging.Client)
 		for _, project := range cfg.Projects {
-			lClient, err := logging.NewLoggingClient(ctx, project.ID)
+			lClient, err := logging.NewLoggingClient(ctx, project.ID, zapLogger.Logger)
 			if err != nil {
-				log.Fatalf("Failed to create logging client for project %s: %v", project.ID, err)
+				zapLogger.Fatal("Failed to create logging client for project", zap.String("projectID", project.ID), zap.Error(err))
 			}
 			lClients[project.ID] = lClient
 		}
@@ -76,32 +126,32 @@ func main() {
 			Project:   cfg.GCPProjectID,
 			Location:  cfg.VertexLocation,
 			ModelName: cfg.ModelName,
-		})
+		}, zapLogger.Logger)
 		if err != nil {
-			log.Fatalf("Failed to create ADK agent: %v", err)
+			zapLogger.Fatal("Failed to create ADK agent", zap.Error(err))
 		}
 
 		// Initialize debugger
 		debugger = debug.NewDebugger(lClients, adkAgent, debug.Config{
 			LookbackDuration: time.Duration(cfg.DebugTimeWindow) * time.Minute,
-		})
+		}, zapLogger.Logger)
 	}
 
 	// Ensure proper cleanup
 	defer func() {
 		for projectID, mClient := range mClients {
 			if err := mClient.Close(); err != nil {
-				log.Printf("Failed to close monitoring client for project %s: %v", projectID, err)
+				zapLogger.Error("Failed to close monitoring client for project", zap.String("projectID", projectID), zap.Error(err))
 			}
 		}
 		for projectID, rClient := range rClients {
 			if err := rClient.Close(); err != nil {
-				log.Printf("Failed to close Cloud Run client for project %s: %v", projectID, err)
+				zapLogger.Error("Failed to close Cloud Run client for project", zap.String("projectID", projectID), zap.Error(err))
 			}
 		}
 		for projectID, lClient := range lClients {
 			if err := lClient.Close(); err != nil {
-				log.Printf("Failed to close logging client for project %s: %v", projectID, err)
+				zapLogger.Error("Failed to close logging client for project", zap.String("projectID", projectID), zap.Error(err))
 			}
 		}
 	}()
@@ -114,13 +164,14 @@ func main() {
 	sClient := slack.New(cfg.SlackBotToken, ops...)
 
 	// Create multi-project handler
-	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, debugger, cfg.TmpDir, cfg)
+	handler := slackinternal.NewMultiProjectSlackEventHandler(sClient, rClients, mClients, debugger, cfg.TmpDir, cfg, zapLogger.Logger)
 
 	// Create service with multi-project support
 	svc := cloudrunslackbot.NewMultiProjectCloudRunSlackBotService(
 		sClient,
 		cfg,
 		handler,
+		zapLogger,
 	)
 	svc.Run()
 }
