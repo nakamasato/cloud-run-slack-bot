@@ -4,7 +4,6 @@ package trace
 import (
 	"context"
 	"fmt"
-	"log"
 
 	texporter "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"go.opentelemetry.io/otel"
@@ -12,6 +11,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 )
 
 const (
@@ -36,7 +36,7 @@ type Provider struct {
 }
 
 // NewProvider creates a new OpenTelemetry TracerProvider with Google Cloud Trace exporter.
-func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
+func NewProvider(ctx context.Context, cfg Config, logger *zap.Logger) (*Provider, error) {
 	if cfg.ProjectID == "" {
 		return nil, fmt.Errorf("projectID is required")
 	}
@@ -94,7 +94,9 @@ func NewProvider(ctx context.Context, cfg Config) (*Provider, error) {
 	// Set global TracerProvider
 	otel.SetTracerProvider(tp)
 
-	log.Printf("Trace provider initialized for project %s with sampling rate %.2f", cfg.ProjectID, cfg.SamplingRate)
+	logger.Info("Trace provider initialized",
+		zap.String("project_id", cfg.ProjectID),
+		zap.Float64("sampling_rate", cfg.SamplingRate))
 
 	return &Provider{tp: tp}, nil
 }

@@ -14,7 +14,7 @@ type CloudRunSlackBotService interface {
 // NewCloudRunSlackBotService creates a service for single project (backward compatibility)
 func NewCloudRunSlackBotService(sClient *slack.Client, channels map[string]string, defaultChannel string, slackMode string, handler *slackinternal.SlackEventHandler, signingSecret string, logger *zap.Logger) CloudRunSlackBotService {
 	if slackMode == "socket" {
-		return NewCloudRunSlackBotSocket(channels, defaultChannel, sClient, handler)
+		return NewCloudRunSlackBotSocket(channels, defaultChannel, sClient, handler, logger)
 	}
 	return NewCloudRunSlackBotHttp(channels, defaultChannel, sClient, handler, signingSecret, logger)
 }
@@ -22,7 +22,7 @@ func NewCloudRunSlackBotService(sClient *slack.Client, channels map[string]strin
 // NewMultiProjectCloudRunSlackBotService creates a service for multi-project support
 func NewMultiProjectCloudRunSlackBotService(sClient *slack.Client, cfg *config.Config, handler *slackinternal.MultiProjectSlackEventHandler, logger *zap.Logger) CloudRunSlackBotService {
 	if cfg.SlackAppMode == "socket" {
-		return NewMultiProjectCloudRunSlackBotSocket(cfg, sClient, handler)
+		return NewMultiProjectCloudRunSlackBotSocket(cfg, sClient, handler, logger)
 	}
 	return NewMultiProjectCloudRunSlackBotHttp(cfg, sClient, handler, logger)
 }

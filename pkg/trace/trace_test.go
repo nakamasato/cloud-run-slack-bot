@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 )
 
 func TestNewProvider_MissingProjectID(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewProvider(ctx, Config{})
+	_, err := NewProvider(ctx, Config{}, zap.NewNop())
 	if err == nil {
 		t.Fatal("Expected error when projectID is missing")
 	}
@@ -24,7 +25,7 @@ func TestNewProvider_WithConfig(t *testing.T) {
 		TestMode:     true, // Skip exporter creation in tests
 	}
 
-	provider, err := NewProvider(ctx, cfg)
+	provider, err := NewProvider(ctx, cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Failed to create provider: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestGetTracer(t *testing.T) {
 		TestMode:  true, // Skip exporter creation in tests
 	}
 
-	provider, err := NewProvider(ctx, cfg)
+	provider, err := NewProvider(ctx, cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Failed to create provider: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestGetTracerWithName(t *testing.T) {
 		TestMode:  true, // Skip exporter creation in tests
 	}
 
-	provider, err := NewProvider(ctx, cfg)
+	provider, err := NewProvider(ctx, cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Failed to create provider: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestSpanErrorRecording(t *testing.T) {
 		TestMode:  true, // Skip exporter creation in tests
 	}
 
-	provider, err := NewProvider(ctx, cfg)
+	provider, err := NewProvider(ctx, cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Failed to create provider: %v", err)
 	}

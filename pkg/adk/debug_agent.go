@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/genai"
 )
 
@@ -60,10 +60,11 @@ type ErrorAnalysis struct {
 type DebugAgent struct {
 	client *genai.Client
 	model  string
+	logger *zap.Logger
 }
 
 // NewDebugAgent creates a new agent configured for Vertex AI.
-func NewDebugAgent(ctx context.Context, cfg Config) (*DebugAgent, error) {
+func NewDebugAgent(ctx context.Context, cfg Config, logger *zap.Logger) (*DebugAgent, error) {
 	clientConfig := &genai.ClientConfig{
 		Project:  cfg.Project,
 		Location: cfg.Location,
@@ -75,8 +76,11 @@ func NewDebugAgent(ctx context.Context, cfg Config) (*DebugAgent, error) {
 		return nil, fmt.Errorf("failed to create GenAI client: %w", err)
 	}
 
-	log.Printf("GenAI agent created with model %s (project: %s, location: %s)\n", cfg.ModelName, cfg.Project, cfg.Location)
-	return &DebugAgent{client: client, model: cfg.ModelName}, nil
+	logger.Info("GenAI agent created",
+		zap.String("model", cfg.ModelName),
+		zap.String("project", cfg.Project),
+		zap.String("location", cfg.Location))
+	return &DebugAgent{client: client, model: cfg.ModelName, logger: logger}, nil
 }
 
 var groupResponseSchema = &genai.Schema{
@@ -157,7 +161,9 @@ func (a *DebugAgent) GroupErrors(ctx context.Context, errors []ErrorLog) ([]Erro
 	// Limit errors for LLM processing to prevent context window issues
 	errorsToProcess := errors
 	if len(errors) > maxErrorsForGrouping {
-		log.Printf("Warning: Truncating %d errors to %d for LLM grouping\n", len(errors), maxErrorsForGrouping)
+		a.logger.Warn("Truncating errors for LLM grouping",
+			zap.Int("original_count", len(errors)),
+			zap.Int("truncated_count", maxErrorsForGrouping))
 		errorsToProcess = errors[:maxErrorsForGrouping]
 	}
 
@@ -199,7 +205,9 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 	responseText := extractJSON(result)
 
 	if err := json.Unmarshal([]byte(responseText), &groupResponse); err != nil {
-		log.Printf("Failed to parse grouping response: %v\nResponse: %s", err, responseText)
+		a.logger.Error("Failed to parse grouping response",
+			zap.Error(err),
+			zap.String("response", responseText))
 		// Fallback: treat all errors as one group
 		return []ErrorGroup{{
 			Pattern:        "Ungrouped errors",
@@ -240,7 +248,9 @@ Only respond with valid JSON, no other text.`, strings.Join(errorMessages, "\n")
 		}
 	}
 
-	log.Printf("Grouped %d errors into %d groups\n", len(errorsToProcess), len(groups))
+	a.logger.Info("Grouped errors",
+		zap.Int("error_count", len(errorsToProcess)),
+		zap.Int("group_count", len(groups)))
 	return groups, nil
 }
 
@@ -281,7 +291,9 @@ Only respond with valid JSON, no other text.`, group.Pattern, group.Count, group
 	responseText := extractJSON(result)
 
 	if err := json.Unmarshal([]byte(responseText), &analysis); err != nil {
-		log.Printf("Failed to parse analysis response: %v\nResponse: %s", err, responseText)
+		a.logger.Error("Failed to parse analysis response",
+			zap.Error(err),
+			zap.String("response", responseText))
 		// Fallback with basic analysis
 		return &ErrorAnalysis{
 			Summary:        fmt.Sprintf("Error pattern: %s (%d occurrences)", group.Pattern, group.Count),
