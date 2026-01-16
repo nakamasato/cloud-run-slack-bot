@@ -459,7 +459,7 @@ func (h *SlackEventHandler) getServiceMetrics(ctx context.Context, channelId, sv
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	h.logger.Debug("Saving visualization", zap.String("image_name", imgName))
 
-	size, err := visualize.Visualize(title, imgName, startTime, endTime, aggregationPeriod, seriesMap, h.logger)
+	size, err := visualize.Visualize(ctx, title, imgName, startTime, endTime, aggregationPeriod, seriesMap, h.logger)
 	if err != nil {
 		h.logger.Error("Failed to visualize metrics", zap.Error(err))
 		return nil
@@ -656,7 +656,7 @@ func (h *SlackEventHandler) describeJob(ctx context.Context, channelId, jobName 
 
 func (h *SlackEventHandler) sample(ctx context.Context, channelId string) error {
 	imgName := path.Join(h.tmpDir, "sample.png")
-	err := visualize.VisualizeSample(imgName, h.logger)
+	err := visualize.VisualizeSample(ctx, imgName, h.logger)
 	if err != nil {
 		return err
 	}
@@ -1185,7 +1185,7 @@ func (h *MultiProjectSlackEventHandler) getServiceMetricsForProject(ctx context.
 	imgName := path.Join(h.tmpDir, fmt.Sprintf("%s-metrics.png", svcName))
 	h.logger.Debug("Saving visualization", zap.String("image_name", imgName))
 
-	size, err := visualize.Visualize(title, imgName, startTime, endTime, aggregationPeriod, seriesMap, h.logger)
+	size, err := visualize.Visualize(ctx, title, imgName, startTime, endTime, aggregationPeriod, seriesMap, h.logger)
 	if err != nil {
 		h.logger.Error("Failed to visualize metrics", zap.Error(err))
 		return nil
@@ -1272,7 +1272,7 @@ func (h *MultiProjectSlackEventHandler) getServiceMetricsForProject(ctx context.
 
 func (h *MultiProjectSlackEventHandler) sample(ctx context.Context, channelId string) error {
 	imgName := path.Join(h.tmpDir, "sample.png")
-	err := visualize.VisualizeSample(imgName, h.logger)
+	err := visualize.VisualizeSample(ctx, imgName, h.logger)
 	if err != nil {
 		return err
 	}

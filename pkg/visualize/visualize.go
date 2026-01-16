@@ -23,8 +23,8 @@ var predefinedColorMap = map[string]drawing.Color{
 
 // Visualize draw a line chart and export to a file.
 // Currently only supports hourly data for recent 24 hours.
-func Visualize(title, imgFile string, startTime, endTime time.Time, interval time.Duration, seriesMap *monitoring.TimeSeriesMap, logger *zap.Logger) (int64, error) {
-	ctx, span := trace.GetTracer().Start(context.Background(), "visualize.Visualize")
+func Visualize(ctx context.Context, title, imgFile string, startTime, endTime time.Time, interval time.Duration, seriesMap *monitoring.TimeSeriesMap, logger *zap.Logger) (int64, error) {
+	ctx, span := trace.GetTracer().Start(ctx, "visualize.Visualize")
 	defer span.End()
 
 	span.SetAttributes(
@@ -77,7 +77,6 @@ func Visualize(title, imgFile string, startTime, endTime time.Time, interval tim
 	}
 
 	span.SetAttributes(attribute.Int64("visualize.file_size", stat.Size()))
-	_ = ctx // suppress unused variable warning
 	return stat.Size(), nil
 }
 
@@ -105,7 +104,9 @@ func makeChartTimeSeries(i int, name string, startTime, endTime time.Time, inter
 	return &cTs
 }
 
-func VisualizeSample(imgFile string, logger *zap.Logger) error {
+func VisualizeSample(ctx context.Context, imgFile string, logger *zap.Logger) error {
+	ctx, span := trace.GetTracer().Start(ctx, "visualize.VisualizeSample")
+	defer span.End()
 	durationInMin := 24 * 60
 	intervalInMin := 5
 
