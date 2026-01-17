@@ -82,6 +82,9 @@ func (d *Debugger) DebugResource(ctx context.Context, projectID, resourceType, r
 		return nil, fmt.Errorf("failed to group errors: %w", err)
 	}
 
+	// Step 2.5: Merge groups by trace correlation
+	groups = d.agent.MergeGroupsByTrace(groups)
+
 	// Step 3: Analyze each group
 	for _, group := range groups {
 		groupResult := ErrorGroupResult{
