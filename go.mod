@@ -10,7 +10,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.32.0
 	github.com/slack-go/slack v0.17.3
 	github.com/wcharczuk/go-chart/v2 v2.1.2
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
