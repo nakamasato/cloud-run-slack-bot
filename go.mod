@@ -6,7 +6,7 @@ toolchain go1.26.2
 
 require (
 	cloud.google.com/go/logging v1.16.0
-	cloud.google.com/go/monitoring v1.26.0
+	cloud.google.com/go/monitoring v1.27.0
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.32.0
 	github.com/slack-go/slack v0.17.3
 	github.com/wcharczuk/go-chart/v2 v2.1.2
