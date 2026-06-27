@@ -75,7 +75,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up ko
-        uses: ko-build/setup-ko@v0.9
+        uses: ko-build/setup-ko@v0.10
         env:
           KO_DOCKER_REPO: "index.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.set_config.outputs.REPO }}"
         with:
