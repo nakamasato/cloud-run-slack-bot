@@ -7,7 +7,7 @@ toolchain go1.26.5
 require (
 	cloud.google.com/go/logging v1.18.0
 	cloud.google.com/go/monitoring v1.29.0
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.33.0
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.34.0
 	github.com/slack-go/slack v0.17.3
 	github.com/wcharczuk/go-chart/v2 v2.1.2
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0
@@ -29,7 +29,7 @@ require (
 	cloud.google.com/go/longrunning v1.0.0 // indirect
 	cloud.google.com/go/storage v1.62.0 // indirect
 	cloud.google.com/go/trace v1.16.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.57.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.58.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
