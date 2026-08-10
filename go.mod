@@ -17,7 +17,7 @@ require (
 	go.uber.org/zap v1.28.0
 	google.golang.org/api v0.292.0
 	google.golang.org/genai v1.67.0
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
