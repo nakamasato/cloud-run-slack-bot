@@ -1,6 +1,6 @@
 module github.com/nakamasato/cloud-run-slack-bot
 
-go 1.25.8
+go 1.26.0
 
 toolchain go1.26.6
 
@@ -15,7 +15,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
 	go.uber.org/zap v1.28.0
-	google.golang.org/api v0.296.0
+	google.golang.org/api v0.297.0
 	google.golang.org/genai v1.71.0
 	google.golang.org/protobuf v1.36.12
 )
