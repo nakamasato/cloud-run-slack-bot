@@ -100,6 +100,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.35.
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.35.0/go.mod h1:3zRs1e/YFBfj7yv/2HFUlH1EKaP0priee5IqmYUHMP4=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.36.0 h1:gBlHWOs3hqcN7cqRbyrvI6q1QwSZHyp76FajMUzgdpQ=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.36.0/go.mod h1:LmYRYS/wzrxoHi0OKmwhCujGpXFmab6c9xCyP58Hh9U=
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.37.0 h1:gCNy4R0LpSai5VjhxpLJ9MYP4Rc743e+GDL1H35L6pE=
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.37.0/go.mod h1:fHRhIVN6YjLbKQNBxbv9FzW+A1NkFffpTMqqFGyT6oU=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0 h1:Ron4zCA/yk6U7WOBXhTJcDpsUBG9npumK6xw2auFltQ=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0/go.mod h1:cSgYe11MCNYunTnRXrKiR/tHc0eoKjICUuWpNZoVCOo=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 h1:0s6TxfCu2KHkkZPnBfsQ2y5qia0jl3MMrmBhu3nCOYk=
@@ -114,6 +116,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapp
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.59.0/go.mod h1:YqwkQPrWSC7+byyc1VlKbWLBF5JsW5IoL6xUkemYSXk=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.60.0 h1:Oblia1QXBJlM/wOY9ARRUtsXdDYiMCzk3eCMikqoLbI=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.60.0/go.mod h1:SRAbhyZ4R4FagHMM9VtRgSY/lheRoht2fKelZXQUenk=
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.61.0 h1:KhpL26/GviYITHMCEGGqT/l50siFaBCBBKrjv6Z0G/k=
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.61.0/go.mod h1:sg6Wqbl0BKKZ5zKnQj2q0qic/3ziF894SCx1LpbX37Y=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cncf/xds/go v0.0.0-20251022180443-0feb69152e9f h1:Y8xYupdHxryycyPlc9Y+bSQAYZnetRJ70VMVKm5CKI0=
