@@ -16,7 +16,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.46.0
 	go.uber.org/zap v1.28.0
 	google.golang.org/api v0.300.0
-	google.golang.org/genai v1.71.0
+	google.golang.org/genai v1.72.0
 	google.golang.org/protobuf v1.36.12
 )
 
